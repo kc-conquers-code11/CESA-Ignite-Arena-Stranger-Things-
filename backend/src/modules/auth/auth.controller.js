@@ -1,14 +1,20 @@
 import { supabase } from "../../config/supabaseClient.js";
 
 export const signup = async (req, res) => {
+  console.log("SIGNUP BODY:", req.body);
+
   try {
-    const { email, password, role, name } = req.body;
+    const {
+      email,
+      password,
+      firstName,
+      lastName,
+      class: userClass,
+      division,
+      branch,
+    } = req.body;
 
-    if (!email || !password || !role) {
-      return res.status(400).json({ message: "Missing fields" });
-    }
-
-    // Supabase Auth signup
+    // 1️⃣ Create auth user
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -18,33 +24,40 @@ export const signup = async (req, res) => {
       return res.status(400).json({ error: error.message });
     }
 
-    // Store extra user data
-    await supabase.from("users").insert([
-      {
+    // 2️⃣ Insert profile
+    const { error: profileError } = await supabase
+      .from("users")
+      .insert({
         id: data.user.id,
         email,
-        role,
-        name,
-      },
-    ]);
+        first_name: firstName,
+        last_name: lastName,
+        class: userClass,
+        division,
+        branch,
+      });
+      console.log("AUTH USER:", data?.user);
 
-    return res.status(201).json({
-      message: "Signup successful",
-      userId: data.user.id,
-    });
+
+    if (profileError) {
+      console.error("PROFILE INSERT ERROR:", profileError);
+      return res.status(400).json({ error: profileError.message });
+    }
+
+    res.status(201).json({ message: "Signup successful" });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Signup failed" });
   }
+  console.log("PROFILE INSERTED");
+
+
 };
 
-
+// ================= LOGIN =================
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({ message: "Missing credentials" });
-    }
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -55,18 +68,21 @@ export const login = async (req, res) => {
       return res.status(401).json({ error: error.message });
     }
 
-    // Fetch role from users table
-    const { data: userData } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from("users")
-      .select("id, email, role, name")
+      .select("*")
       .eq("id", data.user.id)
       .single();
 
-    return res.status(200).json({
+    if (profileError) {
+      console.error("PROFILE FETCH ERROR:", profileError);
+      return res.status(404).json({ error: "User profile not found" });
+    }
+
+    res.json({
       message: "Login successful",
-      session: data.session,
-      user: userData,
-    });
+      user: profile,
+      session: data.session,});
   } catch (err) {
     res.status(500).json({ error: "Login failed" });
   }
