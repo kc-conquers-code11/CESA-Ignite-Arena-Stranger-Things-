@@ -1,17 +1,11 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Special+Elite&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Fonts Import */
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Special+Elite&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
-/* Stranger Things Specific Font */
-@import url('https://fonts.googleapis.com/css2?family=Merriweather:wght@900&display=swap');
-
 @layer base {
   :root {
-    /* --- STRANGER THINGS SPECIFIC (UPDATED TO MATCH IMAGE) --- */
-    --st-red: #ff1f1f; /* Neon Blood Red from the image */
-
     /* Core Background - Deep dark with red undertones */
     --background: 0 10% 4%;
     --foreground: 0 10% 95%;
@@ -102,12 +96,19 @@
     font-family: 'Inter', sans-serif;
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     font-family: 'Bebas Neue', sans-serif;
     letter-spacing: 0.05em;
   }
 
-  code, pre, .font-mono {
+  code,
+  pre,
+  .font-mono {
     font-family: 'JetBrains Mono', monospace;
   }
 
@@ -122,6 +123,7 @@
 }
 
 @layer components {
+
   /* Glassmorphism with red tint */
   .glass {
     @apply bg-card/50 backdrop-blur-xl border border-primary/10;
@@ -168,7 +170,7 @@
 
   /* Stranger Things Grid Background */
   .grid-bg {
-    background-image: 
+    background-image:
       linear-gradient(hsla(0, 85%, 50%, 0.05) 1px, transparent 1px),
       linear-gradient(90deg, hsla(0, 85%, 50%, 0.05) 1px, transparent 1px);
     background-size: 40px 40px;
@@ -176,7 +178,7 @@
 
   /* Upside Down Grid */
   .grid-upside-down {
-    background-image: 
+    background-image:
       linear-gradient(hsla(200, 80%, 50%, 0.05) 1px, transparent 1px),
       linear-gradient(90deg, hsla(200, 80%, 50%, 0.05) 1px, transparent 1px);
     background-size: 30px 30px;
@@ -188,31 +190,70 @@
   .border-gradient {
     position: relative;
     background: linear-gradient(hsl(var(--card)), hsl(var(--card))) padding-box,
-                var(--gradient-primary) border-box;
+      var(--gradient-primary) border-box;
     border: 1px solid transparent;
   }
 
   /* Flicker Animation */
   @keyframes flicker {
-    0%, 100% { opacity: 1; }
-    5% { opacity: 0.8; }
-    10% { opacity: 1; }
-    15% { opacity: 0.9; }
-    20% { opacity: 1; }
-    55% { opacity: 1; }
-    57% { opacity: 0.7; }
-    60% { opacity: 1; }
-    80% { opacity: 1; }
-    82% { opacity: 0.85; }
-    85% { opacity: 1; }
+
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    5% {
+      opacity: 0.8;
+    }
+
+    10% {
+      opacity: 1;
+    }
+
+    15% {
+      opacity: 0.9;
+    }
+
+    20% {
+      opacity: 1;
+    }
+
+    55% {
+      opacity: 1;
+    }
+
+    57% {
+      opacity: 0.7;
+    }
+
+    60% {
+      opacity: 1;
+    }
+
+    80% {
+      opacity: 1;
+    }
+
+    82% {
+      opacity: 0.85;
+    }
+
+    85% {
+      opacity: 1;
+    }
   }
 
   @keyframes flicker-text {
-    0%, 100% { 
+
+    0%,
+    100% {
       opacity: 1;
       text-shadow: 0 0 10px hsl(var(--primary)), 0 0 30px hsl(var(--primary) / 0.5), 0 0 60px hsl(var(--primary) / 0.3);
     }
-    5%, 57%, 82% { 
+
+    5%,
+    57%,
+    82% {
       opacity: 0.8;
       text-shadow: 0 0 5px hsl(var(--primary)), 0 0 15px hsl(var(--primary) / 0.3);
     }
@@ -224,10 +265,23 @@
 
   /* VHS/CRT Effect */
   @keyframes vhs-glitch {
-    0%, 100% { transform: translateX(0); }
-    10% { transform: translateX(-2px); }
-    20% { transform: translateX(2px); }
-    30% { transform: translateX(0); }
+
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+
+    10% {
+      transform: translateX(-2px);
+    }
+
+    20% {
+      transform: translateX(2px);
+    }
+
+    30% {
+      transform: translateX(0);
+    }
   }
 
   .vhs-effect {
@@ -240,8 +294,15 @@
   }
 
   @keyframes pulseGlow {
-    0%, 100% { box-shadow: 0 0 20px hsla(0, 85%, 50%, 0.3); }
-    50% { box-shadow: 0 0 50px hsla(0, 85%, 50%, 0.6); }
+
+    0%,
+    100% {
+      box-shadow: 0 0 20px hsla(0, 85%, 50%, 0.3);
+    }
+
+    50% {
+      box-shadow: 0 0 50px hsla(0, 85%, 50%, 0.6);
+    }
   }
 
   /* Stranger Things Scanlines */
@@ -253,13 +314,11 @@
     content: '';
     position: absolute;
     inset: 0;
-    background: repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 2px,
-      hsla(0, 0%, 0%, 0.1) 2px,
-      hsla(0, 0%, 0%, 0.1) 4px
-    );
+    background: repeating-linear-gradient(0deg,
+        transparent,
+        transparent 2px,
+        hsla(0, 0%, 0%, 0.1) 2px,
+        hsla(0, 0%, 0%, 0.1) 4px);
     pointer-events: none;
     z-index: 10;
   }
@@ -273,18 +332,16 @@
     content: '';
     position: absolute;
     inset: 0;
-    background: radial-gradient(
-      ellipse at center,
-      transparent 0%,
-      transparent 70%,
-      hsla(0, 0%, 0%, 0.4) 100%
-    );
+    background: radial-gradient(ellipse at center,
+        transparent 0%,
+        transparent 70%,
+        hsla(0, 0%, 0%, 0.4) 100%);
     pointer-events: none;
   }
 
   /* Stranger Things Particles */
   .particles {
-    background-image: 
+    background-image:
       radial-gradient(1px 1px at 20px 30px, hsl(var(--primary) / 0.4), transparent),
       radial-gradient(1px 1px at 40px 70px, hsl(var(--secondary) / 0.3), transparent),
       radial-gradient(1px 1px at 50px 160px, hsl(var(--primary) / 0.3), transparent),
@@ -297,8 +354,13 @@
   }
 
   @keyframes particle-drift {
-    0% { background-position: 0 0; }
-    100% { background-position: 200px 200px; }
+    0% {
+      background-position: 0 0;
+    }
+
+    100% {
+      background-position: 200px 200px;
+    }
   }
 
   /* Status Badges */
@@ -320,21 +382,22 @@
 
   /* Upside Down Portal */
   .portal-effect {
-    background: radial-gradient(
-      ellipse at center,
-      hsla(200, 80%, 30%, 0.3) 0%,
-      hsla(0, 85%, 30%, 0.2) 30%,
-      transparent 70%
-    );
+    background: radial-gradient(ellipse at center,
+        hsla(200, 80%, 30%, 0.3) 0%,
+        hsla(0, 85%, 30%, 0.2) 30%,
+        transparent 70%);
     animation: portal-pulse 4s ease-in-out infinite;
   }
 
   @keyframes portal-pulse {
-    0%, 100% { 
+
+    0%,
+    100% {
       transform: scale(1);
       opacity: 0.5;
     }
-    50% { 
+
+    50% {
       transform: scale(1.1);
       opacity: 0.8;
     }
@@ -371,7 +434,7 @@
   /* 80s Neon Border */
   .neon-border {
     border: 2px solid hsl(var(--primary));
-    box-shadow: 
+    box-shadow:
       inset 0 0 10px hsla(0, 85%, 50%, 0.3),
       0 0 10px hsla(0, 85%, 50%, 0.3),
       0 0 20px hsla(0, 85%, 50%, 0.2);
@@ -380,8 +443,7 @@
   /* Stranger Things Button Hover */
   .stranger-btn {
     position: relative;
-    /* overflow: hidden; */
-    overflow-x: hidden;
+    overflow: hidden;
     transition: all 0.3s ease;
   }
 
@@ -392,12 +454,10 @@
     left: -100%;
     width: 100%;
     height: 100%;
-    background: linear-gradient(
-      90deg,
-      transparent,
-      hsla(0, 85%, 50%, 0.4),
-      transparent
-    );
+    background: linear-gradient(90deg,
+        transparent,
+        hsla(0, 85%, 50%, 0.4),
+        transparent);
     transition: left 0.5s ease;
   }
 
@@ -413,37 +473,8 @@
 
   /* Retro text styles */
   .retro-shadow {
-    text-shadow: 
+    text-shadow:
       3px 3px 0 hsl(var(--primary) / 0.3),
       6px 6px 0 hsl(var(--primary) / 0.1);
-  }
-
-  /* --- STRANGER THINGS SPECIFIC UTILITIES (UPDATED) --- */
-  
-  /* 1. Font Utility (Stretched to match logo) */
-  .font-st {
-    font-family: 'Merriweather', serif;
-    transform: scaleY(1.3); /* Matches the tall look of Benguiat */
-    display: inline-block;
-  }
-
-  /* 2. The Main Text Glow (Matches Image: Black Fill + Blood Red Neon) */
-  .st-glow {
-    color: #000; /* Solid Black Fill */
-    -webkit-text-stroke: 2.5px var(--st-red); /* Thicker stroke for visibility */
-    
-    /* Layered Shadows for diffused light */
-    text-shadow: 
-      0 0 5px  rgba(255, 31, 31, 0.8),   /* Inner vivid glow */
-      0 0 15px rgba(255, 31, 31, 0.5),   /* Mid glow */
-      0 0 40px rgba(200, 0, 0, 0.6);     /* Outer dark red haze */
-  }
-
-  /* 3. The Separator Bar Glow */
-  .st-bar-glow {
-    background-color: var(--st-red);
-    box-shadow: 
-      0 0 10px var(--st-red), 
-      0 0 30px rgba(255, 31, 31, 0.6);
   }
 }

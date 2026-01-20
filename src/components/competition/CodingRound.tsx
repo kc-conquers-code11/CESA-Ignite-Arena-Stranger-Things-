@@ -155,8 +155,17 @@ export const CodingRound = () => {
   const [consoleOutput, setConsoleOutput] = useState<string>('');
   const [testResults, setTestResults] = useState<TestResult[]>([]);
   const [activeTab, setActiveTab] = useState('problem');
-  
-  const { completeRound, startCoding, codingStartTime, setCurrentCode, submitCode } = useCompetitionStore();
+
+  // ✅ FIXED: All store properties destructured inside the component
+  const {
+    completeRound,
+    startCoding,
+    codingStartTime,
+    setCurrentCode,
+    submitCode,
+    incrementTabSwitch, // Available for use
+    disqualify        // Available for use
+  } = useCompetitionStore();
 
   useEffect(() => {
     if (!codingStartTime) {
@@ -167,6 +176,20 @@ export const CodingRound = () => {
   useEffect(() => {
     setCode(defaultCode[language] || '');
   }, [language]);
+
+  // Optional: Tab Switch Detection (Anti-cheat)
+  // Uncomment this if you want to use the variables you added
+  /* useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        incrementTabSwitch();
+        toast.warning("Warning: Tab switching is monitored!");
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [incrementTabSwitch]);
+  */
 
   const handleRun = useCallback(async () => {
     setIsRunning(true);
@@ -217,7 +240,7 @@ export const CodingRound = () => {
 
     setTestResults(mockResults);
     setConsoleOutput('Submission complete!\n\n✅ ACCEPTED\n\nRuntime: 12ms (beats 85%)\nMemory: 14.2 MB (beats 72%)\n\nTest cases: 5/5 passed');
-    
+
     submitCode({
       language,
       code,
@@ -226,12 +249,12 @@ export const CodingRound = () => {
     });
 
     setCurrentCode(code);
-    
+
     setTimeout(() => {
       completeRound('coding');
       toast.success('🎉 Congratulations! You have completed all rounds!');
     }, 1500);
-    
+
     setIsSubmitting(false);
   }, [code, language, completeRound, submitCode, setCurrentCode]);
 
@@ -261,12 +284,12 @@ export const CodingRound = () => {
             </span>
           </div>
         </div>
-        
+
         <div className="flex-1 overflow-auto p-4 space-y-4">
           <p className="text-sm leading-relaxed whitespace-pre-line">
             {problemStatement.description}
           </p>
-          
+
           <div className="space-y-3">
             <h3 className="font-semibold text-sm">Examples:</h3>
             {problemStatement.examples.map((ex, i) => (
@@ -277,7 +300,7 @@ export const CodingRound = () => {
               </div>
             ))}
           </div>
-          
+
           <div>
             <h3 className="font-semibold text-sm mb-2">Constraints:</h3>
             <ul className="text-xs text-muted-foreground space-y-1 font-mono">
@@ -306,7 +329,7 @@ export const CodingRound = () => {
                 ))}
               </SelectContent>
             </Select>
-            
+
             <div className="flex gap-2">
               <Button
                 size="sm"
@@ -329,7 +352,7 @@ export const CodingRound = () => {
               </Button>
             </div>
           </div>
-          
+
           <div className="flex-1 min-h-[300px]">
             <Editor
               height="100%"
@@ -363,13 +386,13 @@ export const CodingRound = () => {
                 Test Results
               </TabsTrigger>
             </TabsList>
-            
+
             <TabsContent value="output" className="flex-1 m-0 p-3 overflow-auto">
               <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap">
                 {consoleOutput || 'Click "Run" to execute your code with sample inputs.'}
               </pre>
             </TabsContent>
-            
+
             <TabsContent value="testcases" className="flex-1 m-0 p-3 overflow-auto">
               {testResults.length > 0 ? (
                 <div className="space-y-2">
@@ -409,7 +432,7 @@ export const CodingRound = () => {
           totalSeconds={60 * 60}
           onTimeUp={handleTimeUp}
         />
-        
+
         {/* Quick Stats */}
         <div className="glass rounded-xl p-4 space-y-3">
           <h3 className="text-sm font-semibold">Submission Stats</h3>

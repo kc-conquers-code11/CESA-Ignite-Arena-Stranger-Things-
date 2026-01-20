@@ -1,10 +1,29 @@
 import { motion } from 'framer-motion';
-import { Trophy, Sparkles, CheckCircle2, Clock, Award } from 'lucide-react';
+import { Trophy, Sparkles, CheckCircle2, Clock, Award, ShieldAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCompetitionStore } from '@/store/competitionStore';
 
+
+
 export const CompletionPage = () => {
-  const { participantName, resetCompetition } = useCompetitionStore();
+  const { participantName, resetCompetition, isDisqualified } = useCompetitionStore();
+   //  DISQUALIFIED VIEW
+  if (isDisqualified) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen text-center gap-4">
+        <ShieldAlert className="w-16 h-16 text-red-600" />
+
+        <h1 className="text-3xl font-bold text-red-600">
+          You Have Been Disqualified
+        </h1>
+
+        <p className="text-gray-400 max-w-md">
+          Tab switching or leaving the competition window is not allowed.
+          Your attempt has been terminated.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <motion.div

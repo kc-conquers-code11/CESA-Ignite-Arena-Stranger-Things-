@@ -8,9 +8,13 @@ import { FlowchartRound } from './FlowchartRound';
 import { CodingRound } from './CodingRound';
 import { CompletionPage } from './CompletionPage';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useEffect, useRef } from 'react';
 
 export const CompetitionLayout = () => {
-  const { currentRound } = useCompetitionStore();
+const { currentRound, incrementTabSwitch,disqualify,
+  tabSwitchCount } = useCompetitionStore();
+const blurLock = useRef(false);
+
 
   const renderRound = () => {
     switch (currentRound) {
@@ -28,6 +32,35 @@ export const CompetitionLayout = () => {
         return <RulesPage />;
     }
   };
+//ye use effect ayush ne daala h
+useEffect(() => {
+  const handleVisibilityChange = () => {
+    if (document.hidden) {
+      disqualify(); // single source of truth
+    }
+  };
+
+  const handleBlur = () => {
+    if (blurLock.current) return;
+
+    blurLock.current = true;
+    disqualify();
+
+    setTimeout(() => {
+      blurLock.current = false;
+    }, 1000);
+  };
+
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  window.addEventListener('blur', handleBlur);
+
+  return () => {
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+    window.removeEventListener('blur', handleBlur);
+  };
+}, []);
+
+
 
   return (
     <div className="min-h-screen relative">

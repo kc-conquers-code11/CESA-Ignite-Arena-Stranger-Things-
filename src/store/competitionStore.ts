@@ -24,6 +24,8 @@ interface CodeSubmission {
 }
 
 interface CompetitionState {
+  isDisqualified: boolean;
+
   // User Info
   participantId: string | null;
   participantName: string | null;
@@ -60,6 +62,9 @@ interface CompetitionState {
   startMCQ: () => void;
   decrementMCQTime: () => void;
   incrementTabSwitch: () => void;
+  disqualify: () => void;
+  
+
   
   // Flowchart Actions
   saveFlowchart: (data: FlowchartData) => void;
@@ -76,6 +81,7 @@ interface CompetitionState {
 }
 
 const initialState = {
+  isDisqualified: false,
   participantId: null,
   participantName: null,
   currentRound: 'rules' as Round,
@@ -139,9 +145,34 @@ export const useCompetitionStore = create<CompetitionState>()(
         mcqTimeRemaining: Math.max(0, state.mcqTimeRemaining - 1)
       })),
       
-      incrementTabSwitch: () => set((state) => ({
-        tabSwitchCount: state.tabSwitchCount + 1
-      })),
+      /*incrementTabSwitch: () => set((state) => ({
+      tabSwitchCount: state.tabSwitchCount + 1
+      })),*/
+
+      //ayush code below, ek switch pe disqualify
+   incrementTabSwitch: () =>
+  set((state) => ({
+    tabSwitchCount: state.tabSwitchCount + 1,
+  })),
+
+disqualify: () =>
+  set((state) => ({
+    isDisqualified: true,
+    currentRound: 'completed',
+    roundStatus: {
+      ...state.roundStatus,
+      mcq: 'completed',
+      flowchart: 'completed',
+      coding: 'completed',
+      completed: 'active',
+    },
+  })),
+
+
+
+
+
+
       
       // Flowchart Actions
       saveFlowchart: (data) => set({ flowchartData: data }),

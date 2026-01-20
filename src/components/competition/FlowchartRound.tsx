@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, useEffect } from 'react';
+import React, { useCallback, useMemo, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   ReactFlow,
@@ -17,14 +17,15 @@ import {
   MarkerType,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Send, RotateCcw, ZoomIn, ZoomOut, Download, CheckCircle2 } from 'lucide-react';
+import { Send, RotateCcw, RotateCw, ZoomIn, ZoomOut, Download, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CompetitionTimer } from './CompetitionTimer';
 import { useCompetitionStore } from '@/store/competitionStore';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
-// Custom Node Components
+// --- Custom Node Components (Defined Outside) ---
+
 const StartEndNode = ({ data, type }: { data: { label: string }; type: string }) => (
   <div className={cn(
     "px-6 py-3 rounded-full border-2 font-bold text-sm min-w-[100px] text-center",
@@ -36,6 +37,10 @@ const StartEndNode = ({ data, type }: { data: { label: string }; type: string })
   </div>
 );
 
+// Wrapper components to avoid inline functions in nodeTypes
+const StartNode = (props: any) => <StartEndNode {...props} type="start" />;
+const EndNode = (props: any) => <StartEndNode {...props} type="end" />;
+
 const ProcessNode = ({ data }: { data: { label: string } }) => (
   <div className="px-6 py-3 bg-primary/20 border-2 border-primary rounded-lg font-medium text-sm min-w-[120px] text-center">
     <Handle type="target" position={Position.Top} className="!bg-primary" />
@@ -46,9 +51,9 @@ const ProcessNode = ({ data }: { data: { label: string } }) => (
 
 const DecisionNode = ({ data }: { data: { label: string } }) => (
   <div className="relative">
-    <div 
+    <div
       className="w-32 h-20 bg-secondary/20 border-2 border-secondary flex items-center justify-center font-medium text-sm text-center"
-      style={{ 
+      style={{
         clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)',
         transform: 'scale(1.2)'
       }}
@@ -63,9 +68,9 @@ const DecisionNode = ({ data }: { data: { label: string } }) => (
 );
 
 const InputOutputNode = ({ data }: { data: { label: string } }) => (
-  <div 
+  <div
     className="px-6 py-3 bg-accent/20 border-2 border-accent font-medium text-sm min-w-[120px] text-center"
-    style={{ 
+    style={{
       clipPath: 'polygon(10% 0%, 100% 0%, 90% 100%, 0% 100%)',
     }}
   >
@@ -75,13 +80,7 @@ const InputOutputNode = ({ data }: { data: { label: string } }) => (
   </div>
 );
 
-const nodeTypes: NodeTypes = {
-  start: (props) => <StartEndNode {...props} type="start" />,
-  end: (props) => <StartEndNode {...props} type="end" />,
-  process: ProcessNode,
-  decision: DecisionNode,
-  inputOutput: InputOutputNode,
-};
+// --- Configuration Data ---
 
 const initialNodes: Node[] = [
   { id: '1', type: 'start', position: { x: 250, y: 0 }, data: { label: 'START' } },
@@ -108,11 +107,23 @@ const nodeTemplates = [
   { type: 'inputOutput', label: 'I/O', color: 'accent' },
 ];
 
+// --- Main Component ---
+
 export const FlowchartRound = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [selectedNodeType, setSelectedNodeType] = useState<string | null>(null);
+
   const { completeRound, saveFlowchart, startFlowchart, flowchartStartTime } = useCompetitionStore();
+
+  // Memoize nodeTypes so React Flow doesn't re-create them on every render
+  const nodeTypes = useMemo<NodeTypes>(() => ({
+    start: StartNode,
+    end: EndNode,
+    process: ProcessNode,
+    decision: DecisionNode,
+    inputOutput: InputOutputNode,
+  }), []);
 
   useEffect(() => {
     if (!flowchartStartTime) {
@@ -146,11 +157,11 @@ export const FlowchartRound = () => {
     setSelectedNodeType(null);
   }, [nodes.length, setNodes]);
 
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     setNodes(initialNodes);
     setEdges([]);
     toast.info('Canvas reset');
-  };
+  }, [setNodes, setEdges]);
 
   const handleSubmit = useCallback(() => {
     saveFlowchart({ nodes, edges, submittedAt: new Date() });
@@ -246,8 +257,8 @@ export const FlowchartRound = () => {
             <RotateCcw className="w-4 h-4" />
             Reset Canvas
           </Button>
-          
-          <Button 
+
+          <Button
             onClick={handleSubmit}
             className="bg-gradient-to-r from-primary to-secondary gap-2"
           >
@@ -263,7 +274,7 @@ export const FlowchartRound = () => {
           totalSeconds={45 * 60}
           onTimeUp={handleTimeUp}
         />
-        
+
         {/* Stats */}
         <div className="glass rounded-xl p-4 space-y-3">
           <h3 className="text-sm font-semibold">Canvas Statistics</h3>

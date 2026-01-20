@@ -13,6 +13,8 @@ interface Question {
   options: string[];
   multiCorrect: boolean;
 }
+//ayush
+//ayush
 
 // Sample questions - in production, fetch from backend
 const sampleQuestions: Question[] = [
@@ -49,11 +51,12 @@ const sampleQuestions: Question[] = [
 ];
 
 export const MCQRound = () => {
+
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number[]>>({});
   const [flagged, setFlagged] = useState<Set<string>>(new Set());
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { completeRound, incrementTabSwitch, tabSwitchCount, startMCQ, mcqStartTime } = useCompetitionStore();
+  const { completeRound, incrementTabSwitch, tabSwitchCount, startMCQ, mcqStartTime, disqualify } = useCompetitionStore();
 
   const questions = sampleQuestions;
   const currentQuestion = questions[currentIndex];
@@ -66,28 +69,49 @@ export const MCQRound = () => {
   }, [mcqStartTime, startMCQ]);
 
   // Tab switch detection
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        incrementTabSwitch();
-        toast.warning('Tab switch detected! This has been logged.', {
-          icon: <AlertTriangle className="w-4 h-4" />,
-        });
-      }
-    };
+  // useEffect(() => {
+  //   const handleVisibilityChange = () => {
+  //     if (document.hidden) {
+  //       incrementTabSwitch();
+  //       toast.warning('Tab switch detected! This has been logged.', {
+  //         icon: <AlertTriangle className="w-4 h-4" />,
+  //       });
+  //     }
+  //   };
 
-    const handleBlur = () => {
-      incrementTabSwitch();
-    };
+  //   const handleBlur = () => {
+  //     incrementTabSwitch();
+  //   };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('blur', handleBlur);
+  //   document.addEventListener('visibilitychange', handleVisibilityChange);
+  //   window.addEventListener('blur', handleBlur);
 
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('blur', handleBlur);
-    };
-  }, [incrementTabSwitch]);
+  //   return () => {
+  //     document.removeEventListener('visibilitychange', handleVisibilityChange);
+  //     window.removeEventListener('blur', handleBlur);
+  //   };
+  // }, [incrementTabSwitch]);
+  //   useEffect(() => {
+  //   const handleVisibilityChange = () => {
+  //     if (document.hidden) {
+  //       incrementTabSwitch();
+  //       disqualify(); // 🚨 ONE STRIKE = OUT
+  //     }
+  //   };
+
+  //   document.addEventListener(
+  //     'visibilitychange',
+  //     handleVisibilityChange
+  //   );
+
+  //   return () => {
+  //     document.removeEventListener(
+  //       'visibilitychange',
+  //       handleVisibilityChange
+  //     );
+  //   };
+  // }, []);
+
 
   // Disable copy/paste
   useEffect(() => {
@@ -108,12 +132,12 @@ export const MCQRound = () => {
       document.removeEventListener('copy', handleCopy);
       document.removeEventListener('paste', handlePaste);
     };
-  }, []);
+  }, [incrementTabSwitch, disqualify]);
 
   const handleSelectOption = (optionIndex: number) => {
     setAnswers((prev) => {
       const current = prev[currentQuestion.id] || [];
-      
+
       if (currentQuestion.multiCorrect) {
         // Toggle for multi-select
         if (current.includes(optionIndex)) {
@@ -121,7 +145,7 @@ export const MCQRound = () => {
         }
         return { ...prev, [currentQuestion.id]: [...current, optionIndex] };
       }
-      
+
       // Single select
       return { ...prev, [currentQuestion.id]: [optionIndex] };
     });
@@ -181,7 +205,7 @@ export const MCQRound = () => {
                 </span>
               )}
             </div>
-            
+
             <Button
               variant="ghost"
               size="sm"
@@ -205,7 +229,7 @@ export const MCQRound = () => {
           <div className="space-y-3">
             {currentQuestion.options.map((option, index) => {
               const isSelected = answers[currentQuestion.id]?.includes(index);
-              
+
               return (
                 <motion.button
                   key={index}
@@ -279,7 +303,7 @@ export const MCQRound = () => {
               const isAnswered = answers[q.id]?.length > 0;
               const isFlagged = flagged.has(q.id);
               const isCurrent = index === currentIndex;
-              
+
               return (
                 <button
                   key={q.id}
@@ -301,7 +325,7 @@ export const MCQRound = () => {
               );
             })}
           </div>
-          
+
           <div className="flex gap-4 mt-4 text-xs text-muted-foreground">
             <span className="flex items-center gap-1">
               <span className="w-3 h-3 rounded bg-success/20" /> Answered
@@ -322,7 +346,7 @@ export const MCQRound = () => {
           totalSeconds={30 * 60}
           onTimeUp={handleTimeUp}
         />
-        
+
         {/* Progress */}
         <div className="glass rounded-xl p-4">
           <h3 className="text-sm font-semibold mb-3">Progress</h3>
