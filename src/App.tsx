@@ -1,39 +1,43 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Toaster } from "@/components/ui/toaster"
+import { Toaster as Sonner } from "@/components/ui/sonner"
+import { TooltipProvider } from "@/components/ui/tooltip"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { BrowserRouter, Routes, Route } from "react-router-dom"
 
-import Login from "./pages/Login";
-import Signup from "./pages/Signup";
-import Index from "./pages/Index";
-import NotFound from "./pages/NotFound";
-import ProtectedRoute from "./routes/ProtectedRoute";
+import AdminPanel from "./pages/AdminPanel"
+import NotFound from "./pages/NotFound"
+import StrangerHero from "./components/StrangerHero"
 
-const queryClient = new QueryClient();
+
+const queryClient = new QueryClient()
 
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Routes>
-          {/* DEFAULT → LOGIN */}
-          <Route path="/" element={<Navigate to="/login" replace />} />
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
 
-          {/* AUTH */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
+        <BrowserRouter>
+          <Routes>
+            {/* HOMEPAGE */}
+            <Route
+              path="/"
+              element={
+                <main className="bg-black text-white overflow-hidden">
+                  <StrangerHero />
+                </main>
+              }
+            />
 
-          {/* PROTECTED HOME */}
-          <Route
-            path="/home"
-            element={
-              <ProtectedRoute>
-                <Index />
-              </ProtectedRoute>
-            }
-          />
+            {/* ADMIN */}
+            <Route path="/admin" element={<AdminPanel />} />
 
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
+            {/* 404 */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
     </QueryClientProvider>
-  );
+  )
 }
