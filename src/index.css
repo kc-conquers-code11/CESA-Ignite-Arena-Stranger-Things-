@@ -1,5 +1,4 @@
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Special+Elite&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Merriweather:wght@900&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -7,14 +6,11 @@
 
 @layer base {
   :root {
-    /* Stranger Things Specific */
-    --st-red: #ff1f1f;
-
-    /* Core Background */
+    /* Core Background - Deep dark with red undertones */
     --background: 0 10% 4%;
     --foreground: 0 10% 95%;
 
-    /* Cards & Surfaces */
+    /* Cards & Surfaces - Dark with subtle warmth */
     --card: 0 15% 7%;
     --card-foreground: 0 10% 95%;
     --card-glass: 0 12% 10%;
@@ -23,21 +19,21 @@
     --popover: 0 15% 7%;
     --popover-foreground: 0 10% 95%;
 
-    /* Primary */
+    /* Primary - Stranger Things Red */
     --primary: 0 85% 50%;
     --primary-foreground: 0 10% 98%;
     --primary-glow: 0 100% 60%;
 
-    /* Secondary */
+    /* Secondary - Eerie Pink/Magenta */
     --secondary: 330 80% 55%;
     --secondary-foreground: 0 10% 98%;
     --secondary-glow: 330 90% 65%;
 
-    /* Muted */
+    /* Muted - Dark grays with warmth */
     --muted: 0 5% 15%;
     --muted-foreground: 0 5% 55%;
 
-    /* Accent */
+    /* Accent - Electric Blue (Upside Down vibes) */
     --accent: 200 80% 50%;
     --accent-foreground: 0 10% 98%;
 
@@ -45,7 +41,7 @@
     --success: 120 60% 40%;
     --success-foreground: 0 10% 98%;
 
-    /* Warning */
+    /* Warning - Amber/Orange */
     --warning: 30 90% 50%;
     --warning-foreground: 0 10% 5%;
 
@@ -60,14 +56,14 @@
 
     --radius: 0.5rem;
 
-    /* Gradients */
+    /* Stranger Things Gradients */
     --gradient-primary: linear-gradient(135deg, hsl(0 85% 50%), hsl(330 80% 55%));
     --gradient-secondary: linear-gradient(135deg, hsl(330 80% 55%), hsl(0 85% 40%));
     --gradient-dark: linear-gradient(180deg, hsl(0 15% 6%), hsl(0 10% 2%));
     --gradient-glass: linear-gradient(135deg, hsla(0, 15%, 15%, 0.4), hsla(0, 10%, 8%, 0.2));
     --gradient-upside-down: linear-gradient(180deg, hsl(200 80% 15%), hsl(0 10% 2%));
 
-    /* Shadows */
+    /* Shadows - Red/Pink glows */
     --shadow-glow-primary: 0 0 40px hsla(0, 85%, 50%, 0.4);
     --shadow-glow-secondary: 0 0 40px hsla(330, 80%, 55%, 0.4);
     --shadow-glass: 0 8px 32px hsla(0, 0%, 0%, 0.6);
@@ -88,7 +84,9 @@
     --background: 0 10% 4%;
     --foreground: 0 10% 95%;
   }
+}
 
+@layer base {
   * {
     @apply border-border;
   }
@@ -114,33 +112,19 @@
     font-family: 'JetBrains Mono', monospace;
   }
 
-  /* Scrollbar */
-  ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+  .font-stranger {
+    font-family: 'Bebas Neue', sans-serif;
+    letter-spacing: 0.15em;
   }
 
-  ::-webkit-scrollbar-track {
-    @apply bg-background;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    @apply bg-primary/30 rounded-full;
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    @apply bg-primary/50;
-  }
-
-  /* Selection */
-  ::selection {
-    @apply bg-primary/40 text-foreground;
+  .font-typewriter {
+    font-family: 'Special Elite', cursive;
   }
 }
 
 @layer components {
 
-  /* Glassmorphism */
+  /* Glassmorphism with red tint */
   .glass {
     @apply bg-card/50 backdrop-blur-xl border border-primary/10;
     box-shadow: var(--shadow-glass);
@@ -151,7 +135,7 @@
     box-shadow: var(--shadow-glass);
   }
 
-  /* Glow Effects */
+  /* Stranger Things Neon Glow Effects */
   .glow-primary {
     box-shadow: var(--shadow-glow-primary);
   }
@@ -184,7 +168,7 @@
     background-image: var(--gradient-secondary);
   }
 
-  /* Grid Backgrounds */
+  /* Stranger Things Grid Background */
   .grid-bg {
     background-image:
       linear-gradient(hsla(0, 85%, 50%, 0.05) 1px, transparent 1px),
@@ -192,6 +176,7 @@
     background-size: 40px 40px;
   }
 
+  /* Upside Down Grid */
   .grid-upside-down {
     background-image:
       linear-gradient(hsla(200, 80%, 50%, 0.05) 1px, transparent 1px),
@@ -201,7 +186,7 @@
     transform-origin: center top;
   }
 
-  /* Animated Border */
+  /* Animated Border with flicker */
   .border-gradient {
     position: relative;
     background: linear-gradient(hsl(var(--card)), hsl(var(--card))) padding-box,
@@ -209,7 +194,7 @@
     border: 1px solid transparent;
   }
 
-  /* Animations */
+  /* Flicker Animation */
   @keyframes flicker {
 
     0%,
@@ -278,6 +263,7 @@
     animation: flicker-text 4s infinite;
   }
 
+  /* VHS/CRT Effect */
   @keyframes vhs-glitch {
 
     0%,
@@ -302,6 +288,11 @@
     animation: vhs-glitch 0.3s infinite;
   }
 
+  /* Pulse Animation */
+  .pulse-glow {
+    animation: pulseGlow 2s ease-in-out infinite;
+  }
+
   @keyframes pulseGlow {
 
     0%,
@@ -314,11 +305,7 @@
     }
   }
 
-  .pulse-glow {
-    animation: pulseGlow 2s ease-in-out infinite;
-  }
-
-  /* Effects */
+  /* Stranger Things Scanlines */
   .scanlines {
     position: relative;
   }
@@ -336,6 +323,7 @@
     z-index: 10;
   }
 
+  /* CRT Screen Effect */
   .crt-effect {
     position: relative;
   }
@@ -351,6 +339,7 @@
     pointer-events: none;
   }
 
+  /* Stranger Things Particles */
   .particles {
     background-image:
       radial-gradient(1px 1px at 20px 30px, hsl(var(--primary) / 0.4), transparent),
@@ -391,7 +380,7 @@
     @apply bg-destructive/20 text-destructive border border-destructive/30;
   }
 
-  /* Portal Effect */
+  /* Upside Down Portal */
   .portal-effect {
     background: radial-gradient(ellipse at center,
         hsla(200, 80%, 30%, 0.3) 0%,
@@ -414,12 +403,35 @@
     }
   }
 
-  /* Editor */
+  /* Code Editor Styling */
   .monaco-editor {
     border-radius: var(--radius);
   }
 
-  /* Neon Border */
+  /* Scrollbar - Red theme */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-background;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-primary/30 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-primary/50;
+  }
+
+  /* Selection - Red */
+  ::selection {
+    @apply bg-primary/40 text-foreground;
+  }
+
+  /* 80s Neon Border */
   .neon-border {
     border: 2px solid hsl(var(--primary));
     box-shadow:
@@ -428,10 +440,10 @@
       0 0 20px hsla(0, 85%, 50%, 0.2);
   }
 
-  /* Button Hover */
+  /* Stranger Things Button Hover */
   .stranger-btn {
     position: relative;
-    overflow-x: hidden;
+    overflow: hidden;
     transition: all 0.3s ease;
   }
 
@@ -455,15 +467,6 @@
 }
 
 @layer utilities {
-  .font-stranger {
-    font-family: 'Bebas Neue', sans-serif;
-    letter-spacing: 0.15em;
-  }
-
-  .font-typewriter {
-    font-family: 'Special Elite', cursive;
-  }
-
   .text-balance {
     text-wrap: balance;
   }
@@ -473,35 +476,5 @@
     text-shadow:
       3px 3px 0 hsl(var(--primary) / 0.3),
       6px 6px 0 hsl(var(--primary) / 0.1);
-  }
-
-  /* Stranger Things Utilities */
-
-  /* Font Utility */
-  .font-st {
-    font-family: 'Merriweather', serif;
-    transform: scaleY(1.3);
-    display: inline-block;
-  }
-
-  /* Main Text Glow */
-  .st-glow {
-    color: #000;
-    -webkit-text-stroke: 2.5px var(--st-red);
-    text-shadow:
-      0 0 5px rgba(255, 31, 31, 0.8),
-      /* Inner vivid glow */
-      0 0 15px rgba(255, 31, 31, 0.5),
-      /* Mid glow */
-      0 0 40px rgba(200, 0, 0, 0.6);
-    /* Outer dark red haze */
-  }
-
-  /* Separator Bar Glow */
-  .st-bar-glow {
-    background-color: var(--st-red);
-    box-shadow:
-      0 0 10px var(--st-red),
-      0 0 30px rgba(255, 31, 31, 0.6);
   }
 }

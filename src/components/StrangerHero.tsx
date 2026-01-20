@@ -11,9 +11,11 @@ export default function StrangerHero() {
   const barRef = useRef<HTMLDivElement>(null);
   const bgRef = useRef<HTMLDivElement>(null);
 
+  // Arrays to store individual letter refs
   const strangerChars = useRef<HTMLSpanElement[]>([]);
   const thingsChars = useRef<HTMLSpanElement[]>([]);
 
+  // Strings to split
   const textTop = "STRANGER";
   const textBottom = "THINGS";
 
@@ -22,15 +24,14 @@ export default function StrangerHero() {
       scrollTrigger: {
         trigger: containerRef.current,
         start: "top top",
-        end: "+=2000", // Optimized duration as requested
-        scrub: 1,
+        end: "+=3500",
+        scrub: 1, // Smooth scrub
         pin: true,
-        pinSpacing: true,
         anticipatePin: 1,
       },
     });
 
-    // 1. Background Animation
+    // 1. Background Animation (Darken & Zoom)
     tl.to(bgRef.current, {
       scale: 1.5,
       opacity: 0,
@@ -38,15 +39,15 @@ export default function StrangerHero() {
       duration: 1
     }, 0);
 
-    // 2. Zoom Effect
+    // 2. Main Wrapper Zoom (Camera moving forward effect)
     tl.to(wrapperRef.current, {
-      scale: 5,
+      scale: 5, 
       opacity: 0,
       ease: "power2.inOut",
       duration: 1
     }, 0);
 
-    // 3. Bar Effect
+    // 3. BAR Logic (Expand & Fade)
     tl.to(barRef.current, {
       scaleX: 5,
       opacity: 0,
@@ -54,25 +55,30 @@ export default function StrangerHero() {
       duration: 0.8
     }, 0);
 
-    // 4. Letter Physics (Top)
+    // --- INDIVIDUAL LETTER PHYSICS --- //
+    
+    // Top Word (STRANGER) - Moves UP and Spreads horizontally
     tl.to(strangerChars.current, {
-      y: "-100vh",
+      y: "-100vh", // Upar bhej rahe hain
       x: (i) => {
+        // Center se distance calculate karo
         const center = (textTop.length - 1) / 2;
-        return (i - center) * 350;
+        const dist = i - center; 
+        return dist * 350; // Jitna door center se, utna tez side mein bhagega
       },
-      scale: 10,
-      rotate: (i) => (i - 3.5) * 15,
+      scale: 10, // Letters bade honge
+      rotate: (i) => (i - 3.5) * 15, // Thoda rotation chaos ke liye
       ease: "power2.inOut",
       duration: 1
     }, 0);
 
-    // 5. Letter Physics (Bottom)
+    // Bottom Word (THINGS) - Moves DOWN and Spreads horizontally
     tl.to(thingsChars.current, {
-      y: "100vh",
+      y: "100vh", // Neeche bhej rahe hain
       x: (i) => {
         const center = (textBottom.length - 1) / 2;
-        return (i - center) * 350;
+        const dist = i - center;
+        return dist * 350;
       },
       scale: 10,
       rotate: (i) => (i - 2.5) * -15,
@@ -83,25 +89,29 @@ export default function StrangerHero() {
   }, { scope: containerRef });
 
   return (
-    <section
-      ref={containerRef}
+    <section 
+      ref={containerRef} 
       className="relative w-full overflow-hidden bg-black flex items-center justify-center perspective-[1000px]"
-      style={{ height: '100vh' }}
+      style={{ height: "100vh" }} // Inline style force karega height ko
     >
-      {/* Background */}
+      
+      {/* BACKGROUND */}
       <div ref={bgRef} className="absolute inset-0 z-0">
-        <img
-          src="https://images.unsplash.com/photo-1518066000714-58c45f1a2c0a?q=80&w=2560&auto=format&fit=crop"
+        <img 
+          src="https://images.unsplash.com/photo-1518066000714-58c45f1a2c0a?q=80&w=2560&auto=format&fit=crop" 
           alt="Forest"
           className="w-full h-full object-cover opacity-60"
         />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,#000_85%)]" />
       </div>
 
-      {/* Wrapper */}
-      <div ref={wrapperRef} className="relative z-20 flex flex-col items-center justify-center will-change-transform">
-
-        {/* STRANGER */}
+      {/* CONTENT WRAPPER */}
+      <div 
+        ref={wrapperRef}
+        className="relative z-20 flex flex-col items-center justify-center will-change-transform"
+      >
+        
+        {/* TOP WORD: STRANGER (Mapping restored here) */}
         <h1 className="flex justify-center overflow-visible">
           {textTop.split("").map((char, i) => (
             <span
@@ -115,10 +125,13 @@ export default function StrangerHero() {
           ))}
         </h1>
 
-        {/* Bar */}
-        <div ref={barRef} className="st-bar-glow w-[100%] h-[3px] md:h-[5px] my-4 md:my-8 rounded-full" />
+        {/* GLOWING BAR */}
+        <div 
+          ref={barRef}
+          className="st-bar-glow w-[100%] h-[3px] md:h-[5px] my-4 md:my-8 rounded-full"
+        />
 
-        {/* THINGS */}
+        {/* BOTTOM WORD: THINGS */}
         <h1 className="flex justify-center overflow-visible">
           {textBottom.split("").map((char, i) => (
             <span
