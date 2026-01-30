@@ -17,22 +17,27 @@ interface CompetitionState {
   userId: string | null;
   email: string | null;
   
-  // Security
+  // Security & Timer
   tabSwitchCount: number;
+  mcqStartTime: number | null; //  Added
   
   // --- ACTIONS ---
   initializeUser: (userId: string, email: string) => Promise<void>;
   acceptRules: () => Promise<void>;
-  startRound1: () => void;
-  
-  // ✅ NEW: Realtime Sync Action
   syncSession: (data: any) => void;
+
+  // Round Management
+  startRound1: () => void;
+  startMCQ: () => void; //  Added
+  completeRound: (round: Round) => Promise<void>; //  Added
 
   // Security Actions
   logTabSwitch: () => Promise<void>;
+  incrementTabSwitch: () => Promise<void>; //  Added (Alias)
   freezeCompetition: () => Promise<void>;
   unfreezeCompetition: () => void;
   disqualifyUser: () => Promise<void>;
+  disqualify: () => Promise<void>; //  Added (Alias)
   
   // Reset
   resetCompetition: () => void;
@@ -50,6 +55,7 @@ const initialState = {
     completed: 'locked',
   } as Record<Round, RoundStatus>,
   tabSwitchCount: 0,
+  mcqStartTime: null,
   userId: null,
   email: null,
 };
@@ -59,11 +65,8 @@ export const useCompetitionStore = create<CompetitionState>()(
     (set, get) => ({
       ...initialState,
 
-      // 1. LOGIN & INIT SESSION
       initializeUser: async (userId, email) => {
         set({ userId, email });
-        
-        // Fetch latest state from DB (Source of Truth)
         const { data } = await supabase
           .from('exam_sessions')
           .select('*')
@@ -71,19 +74,16 @@ export const useCompetitionStore = create<CompetitionState>()(
           .single();
 
         if (data) {
-          // Restore exact state from DB
           set({ 
             competitionStatus: data.status,
             currentRound: data.current_round_slug as Round,
             tabSwitchCount: data.tab_switches || 0,
-            // Update round status map based on current round
             roundStatus: {
                 ...get().roundStatus,
                 [data.current_round_slug]: 'active'
             }
           });
         } else {
-          // New User: Create session
           await supabase.from('exam_sessions').insert({
             user_id: userId,
             email: email,
@@ -93,7 +93,6 @@ export const useCompetitionStore = create<CompetitionState>()(
         }
       },
 
-      // ✅ SAFE SYNC: Updates local state when Admin changes DB
       syncSession: (data) => {
         console.log("⚡ Syncing Session State:", data);
         set({
@@ -103,7 +102,6 @@ export const useCompetitionStore = create<CompetitionState>()(
         });
       },
 
-      // 2. RULES ACCEPTED -> GO TO WAITING ROOM
       acceptRules: async () => {
         const { userId } = get();
         set({ 
@@ -115,45 +113,66 @@ export const useCompetitionStore = create<CompetitionState>()(
           await supabase.from('exam_sessions')
             .update({ current_round_slug: 'waiting' })
             .eq('user_id', userId);
-            
-          await supabase.from('activity_logs').insert({
-            user_id: userId,
-            action_type: 'RULES_ACCEPTED',
-            details: { timestamp: new Date().toISOString() }
-          });
         }
       },
 
-      // 3. ADMIN STARTS EXAM (Used for local fallback)
+      //  FIX: START MCQ ACTION
+      startMCQ: () => {
+        const { mcqStartTime } = get();
+        if (!mcqStartTime) {
+            console.log("🚀 MCQ Started");
+            set({ mcqStartTime: Date.now() });
+        }
+      },
+
       startRound1: () => {
         set({ 
           currentRound: 'mcq',
           roundStatus: { ...get().roundStatus, waiting: 'completed', mcq: 'active' }
         });
+        get().startMCQ(); // Auto start timer
       },
 
-      // 4. SECURITY: TAB SWITCH LOGGING
+      //  FIX: COMPLETE ROUND LOGIC
+      completeRound: async (completedRound) => {
+        const { userId } = get();
+        
+        // Determine Next Round
+        let nextRound: Round = 'completed';
+        if (completedRound === 'mcq') nextRound = 'flowchart';
+        else if (completedRound === 'flowchart') nextRound = 'coding';
+        else if (completedRound === 'coding') nextRound = 'completed';
+
+        // Update Local State
+        set({
+            currentRound: nextRound,
+            roundStatus: {
+                ...get().roundStatus,
+                [completedRound]: 'completed',
+                [nextRound]: 'active'
+            }
+        });
+
+        // Update DB
+        if (userId) {
+             await supabase.from('exam_sessions')
+             .update({ current_round_slug: nextRound })
+             .eq('user_id', userId);
+        }
+      },
+
       logTabSwitch: async () => {
         const { tabSwitchCount, userId, competitionStatus } = get();
-        // If already DQ or Frozen locally, don't spam DB
         if (competitionStatus !== 'active') return;
 
         const newCount = tabSwitchCount + 1;
         set({ tabSwitchCount: newCount });
 
-        // Local Freeze Logic (Immediate Feedback)
         if (newCount >= 2) {
            set({ competitionStatus: 'frozen' });
         }
 
         if (userId) {
-          await supabase.from('activity_logs').insert({
-            user_id: userId,
-            action_type: 'TAB_SWITCH',
-            severity: 'warning',
-            details: { count: newCount, timestamp: new Date().toISOString() }
-          });
-          
           await supabase.from('exam_sessions')
             .update({ 
                 tab_switches: newCount,
@@ -163,6 +182,9 @@ export const useCompetitionStore = create<CompetitionState>()(
         }
       },
 
+      //  Aliases for Component Compatibility
+      incrementTabSwitch: async () => get().logTabSwitch(),
+      
       freezeCompetition: async () => {
         set({ competitionStatus: 'frozen' });
         const { userId } = get();
@@ -179,15 +201,12 @@ export const useCompetitionStore = create<CompetitionState>()(
         set({ competitionStatus: 'disqualified', currentRound: 'completed' });
         const { userId } = get();
         if (userId) {
-            await supabase.from('exam_sessions').update({ status: 'disqualified', is_disqualified: true }).eq('user_id', userId);
-            await supabase.from('activity_logs').insert({
-                user_id: userId,
-                action_type: 'DISQUALIFIED',
-                severity: 'critical',
-                details: { reason: 'Cheat Detection' }
-            });
+            await supabase.from('exam_sessions').update({ status: 'disqualified' }).eq('user_id', userId);
         }
       },
+
+      //  Alias for Component Compatibility
+      disqualify: async () => get().disqualifyUser(),
 
       resetCompetition: () => set(initialState),
     }),
