@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Flag, CheckCircle2, Circle, AlertTriangle } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { ChevronLeft, ChevronRight, Flag, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCompetitionStore } from '@/store/competitionStore';
 import { CompetitionTimer } from './CompetitionTimer';
@@ -13,10 +13,8 @@ interface Question {
   options: string[];
   multiCorrect: boolean;
 }
-//ayush
-//ayush
 
-// Sample questions - in production, fetch from backend
+// Sample questions (Hardcoded for now)
 const sampleQuestions: Question[] = [
   {
     id: 'q1',
@@ -51,102 +49,74 @@ const sampleQuestions: Question[] = [
 ];
 
 export const MCQRound = () => {
-
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number[]>>({});
   const [flagged, setFlagged] = useState<Set<string>>(new Set());
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { completeRound, incrementTabSwitch, tabSwitchCount, startMCQ, mcqStartTime, disqualify } = useCompetitionStore();
+  
+  //  NOW these functions exist in the store
+  const { 
+      completeRound, 
+      incrementTabSwitch, // Alias for logTabSwitch
+      startMCQ, 
+      mcqStartTime, 
+      disqualify // Alias for disqualifyUser
+  } = useCompetitionStore();
 
   const questions = sampleQuestions;
   const currentQuestion = questions[currentIndex];
 
-  // Start timer on mount
+  // 1. Start timer on mount
   useEffect(() => {
+    // If start time is missing, set it
     if (!mcqStartTime) {
       startMCQ();
     }
   }, [mcqStartTime, startMCQ]);
 
-  // Tab switch detection
-  // useEffect(() => {
-  //   const handleVisibilityChange = () => {
-  //     if (document.hidden) {
-  //       incrementTabSwitch();
-  //       toast.warning('Tab switch detected! This has been logged.', {
-  //         icon: <AlertTriangle className="w-4 h-4" />,
-  //       });
-  //     }
-  //   };
-
-  //   const handleBlur = () => {
-  //     incrementTabSwitch();
-  //   };
-
-  //   document.addEventListener('visibilitychange', handleVisibilityChange);
-  //   window.addEventListener('blur', handleBlur);
-
-  //   return () => {
-  //     document.removeEventListener('visibilitychange', handleVisibilityChange);
-  //     window.removeEventListener('blur', handleBlur);
-  //   };
-  // }, [incrementTabSwitch]);
-  //   useEffect(() => {
-  //   const handleVisibilityChange = () => {
-  //     if (document.hidden) {
-  //       incrementTabSwitch();
-  //       disqualify(); // 🚨 ONE STRIKE = OUT
-  //     }
-  //   };
-
-  //   document.addEventListener(
-  //     'visibilitychange',
-  //     handleVisibilityChange
-  //   );
-
-  //   return () => {
-  //     document.removeEventListener(
-  //       'visibilitychange',
-  //       handleVisibilityChange
-  //     );
-  //   };
-  // }, []);
-
-
-  // Disable copy/paste
+  // 2. Anti-Cheat: Tab Switch Detection
   useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        incrementTabSwitch();
+        toast.warning('Tab switch detected! This has been logged.', {
+            icon: <AlertTriangle className="w-4 h-4 text-orange-500" />,
+            duration: 4000
+        });
+      }
+    };
+
     const handleCopy = (e: ClipboardEvent) => {
-      e.preventDefault();
-      toast.error('Copying is disabled during the competition');
+        e.preventDefault();
+        toast.error('Copying is disabled!');
     };
 
     const handlePaste = (e: ClipboardEvent) => {
-      e.preventDefault();
-      toast.error('Pasting is disabled during the competition');
+        e.preventDefault();
+        toast.error('Pasting is disabled!');
     };
 
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     document.addEventListener('copy', handleCopy);
     document.addEventListener('paste', handlePaste);
 
     return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       document.removeEventListener('copy', handleCopy);
       document.removeEventListener('paste', handlePaste);
     };
-  }, [incrementTabSwitch, disqualify]);
+  }, [incrementTabSwitch]);
 
   const handleSelectOption = (optionIndex: number) => {
     setAnswers((prev) => {
       const current = prev[currentQuestion.id] || [];
 
       if (currentQuestion.multiCorrect) {
-        // Toggle for multi-select
         if (current.includes(optionIndex)) {
           return { ...prev, [currentQuestion.id]: current.filter(i => i !== optionIndex) };
         }
         return { ...prev, [currentQuestion.id]: [...current, optionIndex] };
       }
-
-      // Single select
       return { ...prev, [currentQuestion.id]: [optionIndex] };
     });
   };
@@ -165,9 +135,10 @@ export const MCQRound = () => {
 
   const handleSubmit = useCallback(() => {
     setIsSubmitting(true);
-    // In production, send to backend
+    // TODO: Send answers to Supabase here if needed
+    
     setTimeout(() => {
-      completeRound('mcq');
+      completeRound('mcq'); // This triggers navigation to Flowchart
       toast.success('Round 1 completed! Moving to Flowchart Design...');
     }, 1000);
   }, [completeRound]);
@@ -182,25 +153,26 @@ export const MCQRound = () => {
   const isCurrentFlagged = flagged.has(currentQuestion.id);
 
   return (
-    <div className="grid lg:grid-cols-[1fr,300px] gap-6 h-full">
+    <div className="grid lg:grid-cols-[1fr,300px] gap-6 h-full animate-in fade-in slide-in-from-bottom-4">
       {/* Main Content */}
       <div className="space-y-6">
+        
         {/* Question Card */}
         <motion.div
           key={currentQuestion.id}
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -20 }}
-          className="glass-strong rounded-xl p-6"
+          className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6 backdrop-blur-md"
         >
-          {/* Question Header */}
+          {/* Header */}
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <span className="px-3 py-1 rounded-full bg-primary/20 text-primary font-display font-bold text-sm">
+              <span className="px-3 py-1 rounded-full bg-red-900/30 text-red-400 font-display font-bold text-sm border border-red-900/50">
                 Q{currentIndex + 1}/{questions.length}
               </span>
               {currentQuestion.multiCorrect && (
-                <span className="px-3 py-1 rounded-full bg-secondary/20 text-secondary text-xs">
+                <span className="px-3 py-1 rounded-full bg-blue-900/30 text-blue-400 text-xs border border-blue-900/50">
                   Multi-select
                 </span>
               )}
@@ -211,17 +183,17 @@ export const MCQRound = () => {
               size="sm"
               onClick={handleFlag}
               className={cn(
-                "gap-2",
-                isCurrentFlagged && "text-warning bg-warning/10"
+                "gap-2 hover:bg-zinc-800",
+                isCurrentFlagged && "text-yellow-500 bg-yellow-900/20"
               )}
             >
-              <Flag className={cn("w-4 h-4", isCurrentFlagged && "fill-warning")} />
+              <Flag className={cn("w-4 h-4", isCurrentFlagged && "fill-yellow-500")} />
               {isCurrentFlagged ? 'Flagged' : 'Flag'}
             </Button>
           </div>
 
           {/* Question Text */}
-          <h2 className="text-xl font-semibold mb-6 leading-relaxed select-none">
+          <h2 className="text-xl font-semibold mb-6 leading-relaxed select-none text-zinc-100">
             {currentQuestion.question}
           </h2>
 
@@ -237,21 +209,21 @@ export const MCQRound = () => {
                   whileTap={{ scale: 0.99 }}
                   onClick={() => handleSelectOption(index)}
                   className={cn(
-                    "w-full p-4 rounded-lg border-2 text-left transition-all duration-200 flex items-center gap-4 select-none",
+                    "w-full p-4 rounded-lg border-2 text-left transition-all duration-200 flex items-center gap-4 select-none group",
                     isSelected
-                      ? "border-primary bg-primary/10"
-                      : "border-border hover:border-primary/50 hover:bg-card"
+                      ? "border-red-600 bg-red-900/20"
+                      : "border-zinc-700 hover:border-red-500/50 hover:bg-zinc-800"
                   )}
                 >
                   <div className={cn(
-                    "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors",
-                    isSelected ? "border-primary bg-primary" : "border-muted-foreground"
+                    "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors shrink-0",
+                    isSelected ? "border-red-600 bg-red-600" : "border-zinc-600 group-hover:border-zinc-400"
                   )}>
-                    {isSelected && <CheckCircle2 className="w-4 h-4 text-primary-foreground" />}
+                    {isSelected && <CheckCircle2 className="w-4 h-4 text-white" />}
                   </div>
                   <span className={cn(
-                    "font-medium",
-                    isSelected && "text-primary"
+                    "font-medium text-zinc-300 group-hover:text-white transition-colors",
+                    isSelected && "text-white"
                   )}>
                     {option}
                   </span>
@@ -261,13 +233,13 @@ export const MCQRound = () => {
           </div>
         </motion.div>
 
-        {/* Navigation */}
+        {/* Navigation Buttons */}
         <div className="flex items-center justify-between">
           <Button
             variant="outline"
             onClick={() => setCurrentIndex(Math.max(0, currentIndex - 1))}
             disabled={currentIndex === 0}
-            className="gap-2"
+            className="gap-2 border-zinc-700 hover:bg-zinc-800"
           >
             <ChevronLeft className="w-4 h-4" />
             Previous
@@ -278,7 +250,7 @@ export const MCQRound = () => {
               <Button
                 onClick={handleSubmit}
                 disabled={isSubmitting}
-                className="bg-gradient-to-r from-primary to-secondary gap-2"
+                className="bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 gap-2 text-white"
               >
                 <CheckCircle2 className="w-4 h-4" />
                 {isSubmitting ? 'Submitting...' : 'Submit All'}
@@ -286,7 +258,7 @@ export const MCQRound = () => {
             ) : (
               <Button
                 onClick={() => setCurrentIndex(Math.min(questions.length - 1, currentIndex + 1))}
-                className="gap-2 bg-primary"
+                className="gap-2 bg-zinc-100 text-zinc-900 hover:bg-white"
               >
                 Next
                 <ChevronRight className="w-4 h-4" />
@@ -294,74 +266,62 @@ export const MCQRound = () => {
             )}
           </div>
         </div>
-
-        {/* Question Navigator */}
-        <div className="glass rounded-xl p-4">
-          <h3 className="text-sm font-semibold mb-3 text-muted-foreground">Question Navigator</h3>
-          <div className="flex flex-wrap gap-2">
-            {questions.map((q, index) => {
-              const isAnswered = answers[q.id]?.length > 0;
-              const isFlagged = flagged.has(q.id);
-              const isCurrent = index === currentIndex;
-
-              return (
-                <button
-                  key={q.id}
-                  onClick={() => setCurrentIndex(index)}
-                  className={cn(
-                    "w-10 h-10 rounded-lg font-bold text-sm transition-all duration-200 relative",
-                    isCurrent && "ring-2 ring-primary",
-                    isAnswered && !isCurrent && "bg-success/20 text-success",
-                    !isAnswered && !isCurrent && "bg-muted text-muted-foreground hover:bg-muted/80",
-                    isCurrent && isAnswered && "bg-success text-success-foreground",
-                    isCurrent && !isAnswered && "bg-primary/20 text-primary"
-                  )}
-                >
-                  {index + 1}
-                  {isFlagged && (
-                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-warning rounded-full" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="flex gap-4 mt-4 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded bg-success/20" /> Answered
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded bg-muted" /> Unanswered
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded bg-warning" /> Flagged
-            </span>
-          </div>
-        </div>
       </div>
 
       {/* Sidebar */}
       <div className="space-y-4">
+        {/* Pass the mcqStartTime from store to the timer if needed, or timer can use its own relative logic */}
         <CompetitionTimer
           totalSeconds={30 * 60}
           onTimeUp={handleTimeUp}
         />
 
-        {/* Progress */}
-        <div className="glass rounded-xl p-4">
-          <h3 className="text-sm font-semibold mb-3">Progress</h3>
+        {/* Progress Card */}
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 backdrop-blur-md">
+          <h3 className="text-sm font-semibold mb-3 text-zinc-400">Progress</h3>
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Answered</span>
-              <span className="font-bold text-success">{answeredCount}/{questions.length}</span>
+              <span className="text-zinc-500">Answered</span>
+              <span className="font-bold text-red-500">{answeredCount}/{questions.length}</span>
             </div>
-            <div className="h-2 bg-muted rounded-full overflow-hidden">
+            <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
               <div
-                className="h-full bg-success rounded-full transition-all duration-300"
+                className="h-full bg-red-600 rounded-full transition-all duration-300"
                 style={{ width: `${(answeredCount / questions.length) * 100}%` }}
               />
             </div>
           </div>
+        </div>
+
+        {/* Question Navigator */}
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 backdrop-blur-md">
+           <h3 className="text-sm font-semibold mb-3 text-zinc-400">Navigator</h3>
+           <div className="flex flex-wrap gap-2">
+             {questions.map((q, index) => {
+               const isAnswered = answers[q.id]?.length > 0;
+               const isFlagged = flagged.has(q.id);
+               const isCurrent = index === currentIndex;
+
+               return (
+                 <button
+                   key={q.id}
+                   onClick={() => setCurrentIndex(index)}
+                   className={cn(
+                     "w-8 h-8 rounded-lg font-bold text-xs transition-all duration-200 relative",
+                     isCurrent && "ring-2 ring-red-500 bg-red-500/10 text-red-500",
+                     isAnswered && !isCurrent && "bg-green-900/30 text-green-400 border border-green-900/50",
+                     !isAnswered && !isCurrent && "bg-zinc-800 text-zinc-500 hover:bg-zinc-700",
+                     isCurrent && isAnswered && "bg-green-500 text-black ring-green-500"
+                   )}
+                 >
+                   {index + 1}
+                   {isFlagged && (
+                     <span className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-500 rounded-full shadow-lg" />
+                   )}
+                 </button>
+               );
+             })}
+           </div>
         </div>
       </div>
     </div>
