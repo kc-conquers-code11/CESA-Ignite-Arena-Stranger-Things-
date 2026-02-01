@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
-import { Shield, AlertTriangle, ScrollText, Loader2, RefreshCw } from 'lucide-react';
+import { Shield, AlertTriangle, ScrollText, Loader2 } from 'lucide-react';
 import { useCompetitionStore } from '@/store/competitionStore';
 import { supabase } from '@/lib/supabaseClient';
 import { WaitingArea } from './WaitingArea';
@@ -14,19 +14,17 @@ export const RulesPage = () => {
   const { acceptRules, currentRound, userId, syncSession } = useCompetitionStore();
   const [rules, setRules] = useState<any[]>([]); 
 
-  // 1. SELF-CORRECTION CHECK (With Safety Timeout)
+  // 1. SELF-CORRECTION CHECK (Safety Timeout)
   useEffect(() => {
     let isMounted = true;
 
     const checkRealStatus = async () => {
-        // Agar user ID hi nahi hai, toh verify kya karenge? Skip.
         if (!userId) {
             if(isMounted) setVerifying(false);
             return;
         }
 
         try {
-            // DB se latest status maango
             const { data, error } = await supabase
                 .from('exam_sessions')
                 .select('*')
@@ -36,24 +34,21 @@ export const RulesPage = () => {
             if (error) throw error;
 
             if (data && isMounted) {
-                // Agar DB mein round 'rules' nahi hai, toh user ko forward karo
                 if (data.current_round_slug !== 'rules') {
                     console.log("🚀 Auto-Redirecting to:", data.current_round_slug);
                     syncSession(data); // State update
-                    return; // Component re-render hoga aur redirect ho jayega
+                    return; 
                 }
             }
         } catch (err) {
             console.error("Verification Check Failed:", err);
-            // Error aaya toh bhi hum user ko rokenge nahi, Rules dikha denge
         } finally {
-            if (isMounted) setVerifying(false); // Loader hatao (Compulsory)
+            if (isMounted) setVerifying(false); 
         }
     };
 
     checkRealStatus();
 
-    // Safety Timeout: Agar 5 sec tak DB se jawab na aaye, toh loader hata do
     const safetyTimer = setTimeout(() => {
         if (isMounted && verifying) {
             console.warn("⚠️ Verification Timeout - Showing Rules Forcefully");
@@ -85,16 +80,32 @@ export const RulesPage = () => {
     fetchRules();
   }, []);
 
+  // ✅ UPDATED: TRIGGER FULLSCREEN ON START
   const handleAccept = async () => {
       setLoading(true);
+      
+      // 1. Force Full Screen
+      try {
+          const elem = document.documentElement;
+          if (elem.requestFullscreen) {
+              await elem.requestFullscreen();
+          } else if ((elem as any).webkitRequestFullscreen) {
+              await (elem as any).webkitRequestFullscreen(); // Safari/Chrome fallback
+          } else if ((elem as any).msRequestFullscreen) {
+              await (elem as any).msRequestFullscreen(); // IE/Edge fallback
+          }
+      } catch (err) {
+          console.log("Fullscreen request denied (user interaction required). Proceeding anyway.");
+      }
+
+      // 2. Change State (This hides nav in HomePage)
       await acceptRules();
       setLoading(false);
   };
 
-  //  REDIRECT LOGIC
+  // REDIRECT LOGIC
   if (currentRound === 'waiting') return <WaitingArea />;
   
-  //  LOADING SCREEN (Only shows for max 5 seconds now)
   if (verifying) return (
     <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4 text-zinc-500">
         <Loader2 className="animate-spin text-red-600 w-10 h-10" />
