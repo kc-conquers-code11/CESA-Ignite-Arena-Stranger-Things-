@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, Lock } from 'lucide-react';
+import { AlertTriangle, Lock, Loader2 } from 'lucide-react';
 import { useCompetitionStore } from '@/store/competitionStore';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -11,9 +11,10 @@ import { AnimatedBackground } from './AnimatedBackground';
 import { RulesPage } from './RulesPage'; 
 import { WaitingArea } from './WaitingArea'; 
 import { MCQRound } from './MCQRound';
-import { FlowchartRound } from './FlowchartRound';
-import { CodingRound } from './CodingRound';
-import { CompletionPage } from './CompletionPage';
+
+// ✅ FIX: Import the REAL Flowchart Component
+import { FlowchartRound } from './FlowchartRound'; 
+import { CodingRound, CompletionPage } from './RoundPlaceholders'; 
 
 export const CompetitionLayout = () => {
   // 1. GET DATA FROM STORE
@@ -25,11 +26,16 @@ export const CompetitionLayout = () => {
     syncSession 
   } = useCompetitionStore();
 
-  // 1.5. INITIAL DB SYNC ON MOUNT (Fixes Reload Bug)
-  useEffect(() => {
-    if (!userId) return;
+  const [initializing, setInitializing] = useState(true);
 
+  // 1.5. INITIAL DB SYNC ON MOUNT
+  useEffect(() => {
     const initialSync = async () => {
+      if (!userId) {
+          setInitializing(false);
+          return;
+      }
+
       try {
         const { data, error } = await supabase
           .from('exam_sessions')
@@ -37,38 +43,21 @@ export const CompetitionLayout = () => {
           .eq('user_id', userId)
           .single();
 
-        if (error) {
-          console.error("Initial sync error:", error);
-          return;
-        }
-
-        if (data && data.current_round_slug) {
-          // Always sync to ensure state matches DB (handles reload bug)
-          // This ensures users see the correct round even after page refresh
-          console.log("🔄 Initial Sync: Restoring state from DB -", data.current_round_slug);
+        if (data) {
+          console.log("🔄 Initial Sync:", data.status);
           syncSession(data);
         }
       } catch (err) {
-        console.error("Initial sync failed:", err);
+        console.error("Sync failed:", err);
+      } finally {
+        setInitializing(false);
       }
     };
 
     initialSync();
   }, [userId, syncSession]);
 
-  const renderRound = () => {
-    switch (currentRound) {
-      case 'rules': return <RulesPage />;
-      case 'waiting': return <WaitingArea />; 
-      case 'mcq': return <MCQRound />;
-      case 'flowchart': return <FlowchartRound />;
-      case 'coding': return <CodingRound />;
-      case 'completed': return <CompletionPage />;
-      default: return <RulesPage />;
-    }
-  };
-
-  //  2. REALTIME LISTENER (Primary Method)
+  // ✅ 2. REALTIME LISTENER (INSTANT RESUME)
   useEffect(() => {
     if (!userId) return;
 
@@ -77,13 +66,14 @@ export const CompetitionLayout = () => {
       .on(
         'postgres_changes',
         { 
-          event: 'UPDATE', 
-          schema: 'public', 
-          table: 'exam_sessions', 
-          filter: `user_id=eq.${userId}`
+            event: 'UPDATE', 
+            schema: 'public', 
+            table: 'exam_sessions', 
+            filter: `user_id=eq.${userId}` 
         },
         (payload) => {
-          console.log("🔔 Realtime Update:", payload.new);
+          console.log("⚡ Realtime Update:", payload.new.status);
+          // Update store immediately to remove Frozen screen without reload
           syncSession(payload.new);
         }
       )
@@ -92,12 +82,10 @@ export const CompetitionLayout = () => {
     return () => { supabase.removeChannel(channel); };
   }, [userId, syncSession]);
 
-  //  3. BACKUP POLLING (Network Fail-Safe)
-  // Only runs when user is stuck in 'waiting' room
+  // 3. BACKUP POLLING (Network Fail-Safe)
   useEffect(() => {
     if (currentRound !== 'waiting' || !userId) return;
 
-    console.log("⏳ Backup Polling started...");
     const interval = setInterval(async () => {
         const { data } = await supabase
             .from('exam_sessions')
@@ -105,12 +93,11 @@ export const CompetitionLayout = () => {
             .eq('user_id', userId)
             .single();
         
-        // If DB says round is NOT waiting, force update
+        // If DB says we moved past waiting, force update
         if (data && data.current_round_slug !== 'waiting') {
-            console.log(" Polling detected start!", data);
             syncSession(data);
         }
-    }, 4000); // Check every 4 seconds
+    }, 4000); 
 
     return () => clearInterval(interval);
   }, [currentRound, userId, syncSession]);
@@ -118,10 +105,8 @@ export const CompetitionLayout = () => {
 
   // 4. ANTI-CHEAT LOGIC
   useEffect(() => {
-    // Defines where Anti-Cheat is NOT active
     const isSafeZone = currentRound === 'rules' || currentRound === 'waiting' || currentRound === 'completed';
-
-    // If active or in safe zone, do nothing
+    // Don't log if already frozen
     if (isSafeZone || competitionStatus !== 'active') return;
 
     const handleVisibilityChange = () => {
@@ -135,8 +120,29 @@ export const CompetitionLayout = () => {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [currentRound, competitionStatus, logTabSwitch]);
 
+  // ✅ RENDER LOGIC
+  const renderRound = () => {
+    switch (currentRound) {
+      case 'rules': return <RulesPage />;
+      case 'waiting': return <WaitingArea />; 
+      case 'mcq': return <MCQRound />;
+      case 'flowchart': return <FlowchartRound />; // ✅ Now correctly points to the Real Component
+      case 'coding': return <CodingRound />;
+      case 'completed': return <CompletionPage />;
+      default: return <RulesPage />;
+    }
+  };
 
-  // 5. FROZEN SCREEN (PENALTY)
+  if (initializing) {
+      return (
+          <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-4 text-zinc-500">
+              <Loader2 className="w-10 h-10 animate-spin text-red-600" />
+              <p className="animate-pulse font-mono text-sm">Synchronizing Session...</p>
+          </div>
+      );
+  }
+
+  // 5. FROZEN SCREEN (Realtime removal supported)
   if (competitionStatus === 'frozen') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-black relative overflow-hidden p-6 font-sans">
@@ -155,8 +161,8 @@ export const CompetitionLayout = () => {
               We detected multiple tab switches. Your exam is <strong>temporarily locked</strong>.
               <br/>Contact an invigilator to resume.
             </p>
-            <div className="mt-6 text-xs text-zinc-600 font-mono">
-              Session ID: <span className="text-zinc-400">{userId || 'Unknown'}</span>
+            <div className="mt-6 text-xs text-zinc-600 font-mono animate-pulse">
+              Waiting for Admin Signal...
             </div>
          </div>
       </div>

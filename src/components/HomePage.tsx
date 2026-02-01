@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabaseClient'; 
-import { Lock, LogOut, User } from 'lucide-react';
+import { Lock, LogOut } from 'lucide-react';
 import StrangerHero from './StrangerHero'; 
 import { CompetitionLayout } from './competition/CompetitionLayout';
+import { useCompetitionStore } from '@/store/competitionStore'; // ✅ IMPORT STORE
 
 // --- SUB-COMPONENTS ---
 const LockedRules = () => {
@@ -49,13 +50,15 @@ const HelpContent = () => (
 const HomePage = () => {
   const [activeTab, setActiveTab] = useState<'rules' | 'about' | 'help'>('rules');
   const [session, setSession] = useState<any>(null);
-  const [showIntro, setShowIntro] = useState(false); // Start false to prevent flash
-  const [loading, setLoading] = useState(true); // Start true to show nothing while checking
+  const [showIntro, setShowIntro] = useState(false);
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  
+  // ✅ GET ROUND STATUS
+  const { currentRound } = useCompetitionStore();
   
   const ADMIN_EMAILS = ["admin1@strangertech.in", "kc@strangertech.in"];
 
-  //  HELPER: Force Full Screen (F11 Mode)
   const enterFullScreen = () => {
     const elem = document.documentElement;
     if (elem.requestFullscreen) {
@@ -65,33 +68,24 @@ const HomePage = () => {
     }
   };
 
-  //  HELPER: Handle Transition from Intro to Main Site
   const handleIntroFinish = () => {
-    // 1. Force Scroll to Top (Fixes "scrolled to anim" issue)
     window.scrollTo(0, 0);
-    
-    // 2. Try to Enter Full Screen
     enterFullScreen();
-    
-    // 3. Hide Intro (Unmount StrangerHero)
     setShowIntro(false);
   };
 
   useEffect(() => {
-    // 1. Initial Session Check
     const checkUser = async () => {
         try {
             const { data: { session } } = await supabase.auth.getSession();
             setSession(session);
             
             if (session) {
-                // Logged in: NO Intro, check Admin
                 setShowIntro(false);
                 if (session.user.email && ADMIN_EMAILS.includes(session.user.email)) {
                     navigate('/admin');
                 }
             } else {
-                // Not Logged in: SHOW Intro
                 setShowIntro(true);
             }
         } catch (err) {
@@ -99,13 +93,12 @@ const HomePage = () => {
             setSession(null);
             setShowIntro(true);
         } finally {
-            setLoading(false); // Ready to render even if Supabase misconfigured
+            setLoading(false);
         }
     };
 
     checkUser();
     
-    // 2. Realtime Auth Listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session) {
@@ -121,52 +114,57 @@ const HomePage = () => {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    setShowIntro(true); // Logout hone pe wapas animation dikha sakte ho
+    setShowIntro(true);
     navigate('/login');
   };
 
-  // Prevent flash of content or animation while checking auth
   if (loading) return <div className="min-h-screen bg-black" />;
+
+  // ✅ LOGIC: Navbar only shows if not logged in OR if still on 'rules' page
+  // Once user accepts rules (waiting/mcq etc), Navbar disappears.
+  const showNavbar = !session || (session && currentRound === 'rules');
 
   return (
     <div className="min-h-screen bg-black text-white pb-20">
       
-      {/* CONDITIONAL RENDER: Intro OR Content */}
       {showIntro ? (
-          //  Pass the Robust Handler here
           <StrangerHero onComplete={handleIntroFinish} />
       ) : (
           <div className="min-h-screen bg-black text-white pb-20 animate-in fade-in duration-1000">
-            {/* NAVBAR */}
-            <nav className="sticky top-0 z-50 bg-black/80 backdrop-blur-md border-b border-red-900/30 px-6 py-4">
-                <div className="container mx-auto flex flex-wrap justify-between items-center">
-                <div className="text-2xl font-st font-black text-red-600 tracking-wider">Stranger Tech</div>
-                <ul className="flex items-center space-x-2 md:space-x-6 text-sm font-medium">
-                    {['rules', 'about', 'help'].map((tab) => (
-                    <li key={tab}>
-                        <button onClick={() => setActiveTab(tab as any)} className={`px-3 py-2 rounded-md transition-all capitalize ${activeTab === tab ? 'text-red-500 bg-red-950/30 border border-red-900/50' : 'text-zinc-400 hover:text-red-400'}`}>
-                        {tab === 'rules' && !session && <Lock className="w-3 h-3 inline mr-1 mb-0.5" />} {tab}
-                        </button>
-                    </li>
-                    ))}
-                </ul>
-                <div className="ml-4">
-                    {session ? (
-                        <div className="flex items-center gap-4">
-                            <span className="hidden md:block text-zinc-400 text-sm">{session.user.email}</span>
-                            <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 border border-zinc-700 hover:border-red-600 rounded text-sm transition-colors">
-                                <LogOut className="w-4 h-4" /> Logout
+            
+            {/* ✅ CONDITIONAL NAVBAR */}
+            {showNavbar && (
+                <nav className="sticky top-0 z-50 bg-black/80 backdrop-blur-md border-b border-red-900/30 px-6 py-4 transition-all duration-500">
+                    <div className="container mx-auto flex flex-wrap justify-between items-center">
+                    <div className="text-2xl font-st font-black text-red-600 tracking-wider">Stranger Tech</div>
+                    <ul className="flex items-center space-x-2 md:space-x-6 text-sm font-medium">
+                        {['rules', 'about', 'help'].map((tab) => (
+                        <li key={tab}>
+                            <button onClick={() => setActiveTab(tab as any)} className={`px-3 py-2 rounded-md transition-all capitalize ${activeTab === tab ? 'text-red-500 bg-red-950/30 border border-red-900/50' : 'text-zinc-400 hover:text-red-400'}`}>
+                            {tab === 'rules' && !session && <Lock className="w-3 h-3 inline mr-1 mb-0.5" />} {tab}
                             </button>
-                        </div>
-                    ) : (
-                        <button onClick={() => navigate('/login')} className="px-5 py-2 bg-gradient-to-r from-red-700 to-red-900 hover:from-red-600 text-white font-bold rounded-md shadow-lg">LOGIN / SIGNUP</button>
-                    )}
-                </div>
-                </div>
-            </nav>
+                        </li>
+                        ))}
+                    </ul>
+                    <div className="ml-4">
+                        {session ? (
+                            <div className="flex items-center gap-4">
+                                <span className="hidden md:block text-zinc-400 text-sm">{session.user.email}</span>
+                                <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 border border-zinc-700 hover:border-red-600 rounded text-sm transition-colors">
+                                    <LogOut className="w-4 h-4" /> Logout
+                                </button>
+                            </div>
+                        ) : (
+                            <button onClick={() => navigate('/login')} className="px-5 py-2 bg-gradient-to-r from-red-700 to-red-900 hover:from-red-600 text-white font-bold rounded-md shadow-lg">LOGIN / SIGNUP</button>
+                        )}
+                    </div>
+                    </div>
+                </nav>
+            )}
 
-            {/* CONTENT */}
-            <main className="container mx-auto px-6 py-12 md:py-20 relative z-10">
+            {/* ✅ DYNAMIC CONTENT CONTAINER */}
+            {/* Logic: If Navbar is gone, remove padding so Competition Header sits at top */}
+            <main className={showNavbar ? "container mx-auto px-6 py-12 md:py-20 relative z-10" : "w-full h-full relative z-10"}>
                 <AnimatePresence mode="wait">
                     <motion.div
                         key={activeTab}
@@ -174,6 +172,7 @@ const HomePage = () => {
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -20 }}
                         transition={{ duration: 0.3 }}
+                        className="w-full"
                     >
                         {activeTab === 'rules' && (session ? <CompetitionLayout /> : <LockedRules />)}
                         {activeTab === 'about' && <AboutContent />}
