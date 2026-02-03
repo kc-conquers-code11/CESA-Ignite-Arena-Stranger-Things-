@@ -1,7 +1,6 @@
 import React, { useCallback, useState, useEffect } from 'react';
 import { Tldraw, Editor, useEditor } from 'tldraw';
-import 'tldraw/tldraw.css'; // Import Tldraw CSS
-import { motion } from 'framer-motion';
+import 'tldraw/tldraw.css';
 import { Send, RotateCcw, CheckCircle2, Loader2, BrainCircuit, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CompetitionTimer } from './CompetitionTimer';
@@ -19,12 +18,9 @@ interface FlowchartProblem {
 }
 
 // --- SUB-COMPONENT: EDITOR CONTROLLER ---
-// Tldraw needs hooks inside the component tree
 const EditorController = ({ onMount }: { onMount: (editor: Editor) => void }) => {
   const editor = useEditor();
-  useEffect(() => {
-    if (editor) onMount(editor);
-  }, [editor, onMount]);
+  useEffect(() => { if (editor) onMount(editor); }, [editor, onMount]);
   return null;
 }
 
@@ -63,7 +59,7 @@ export const FlowchartRound = () => {
   // 2. Handle Editor Mount
   const handleMount = useCallback((editorInstance: Editor) => {
     setEditor(editorInstance);
-    // Optional: Set default tool to 'draw' or 'select'
+    // Set dark mode via user preferences
     editorInstance.user.updateUserPreferences({ colorScheme: 'dark' });
   }, []);
 
@@ -76,7 +72,7 @@ export const FlowchartRound = () => {
     }
   }, [editor]);
 
-  // 4. Submit Logic (Adapting Tldraw Data for AI)
+  // 4. FAIL-SAFE SUBMIT LOGIC
   const handleSubmit = useCallback(async () => {
     if (!userId || !activeProblem || !editor) {
       toast.error("System Error: Editor not ready.");
@@ -84,58 +80,74 @@ export const FlowchartRound = () => {
     }
 
     setIsSubmitting(true);
-    const toastId = toast.loading("Analyzing Logic Structure...");
+    const toastId = toast.loading("Saving & Analyzing...");
 
     try {
-      // Extract Data from Tldraw
-      const snapshot = editor.store.serialize();
-      const allRecords = Object.values(snapshot);
+      // 1. Get Tldraw Data
+      const records = editor.store.allRecords();
 
-      // Filter for relevant shapes (nodes) and bindings (edges/arrows)
-      // We send this raw JSON to AI. GPT-4o is smart enough to parse Tldraw JSON directly.
-      const nodesData = allRecords.filter((r: any) => r.typeName === 'shape');
-      const edgesData = allRecords.filter((r: any) => r.typeName === 'binding' || (r.typeName === 'shape' && r.type === 'arrow'));
+      // Filter for shapes (nodes) and bindings (edges)
+      const nodesData = records.filter(r => r.typeName === 'shape');
+      const edgesData = records.filter(r => r.typeName === 'binding' || (r.typeName === 'shape' && r.type === 'arrow'));
 
-      // Save submission
-      // Note: We dump the specific Tldraw format into the 'nodes' column
-      const { data: submission, error } = await supabase
+      // 2. Save to DB (Primary Step)
+      const { data: submission, error: dbError } = await supabase
         .from('flowchart_submissions')
         .insert({
           user_id: userId,
           problem_id: activeProblem.id,
-          nodes: nodesData, // Saving raw shapes as nodes
-          edges: edgesData, // Saving arrows as edges
+          nodes: nodesData,
+          edges: edgesData,
           status: 'pending'
         })
         .select()
         .single();
 
-      if (error) throw error;
+      if (dbError) throw new Error(`DB Save Failed: ${dbError.message}`);
 
-      // Trigger AI
-      const { data: aiRes, error: funcError } = await supabase.functions.invoke('evaluate-flowchart', {
-        body: { submission_id: submission.id }
-      });
+      // 3. Try Calling AI (Secondary Step)
+      try {
+        const { data: responseData, error: invokeError } = await supabase.functions.invoke('evaluate-flowchart', {
+          body: { submission_id: submission.id }
+        });
 
-      if (funcError) throw funcError;
+        if (invokeError) throw invokeError;
 
-      setAiFeedback(aiRes);
-      toast.success(`Score: ${aiRes.score}/100`, { id: toastId });
+        if (responseData?.success) {
+          // AI Success
+          setAiFeedback(responseData.data);
+          toast.success(`Score: ${responseData.data.score}/100`, { id: toastId });
+        } else {
+          throw new Error("AI Logic Error");
+        }
 
+      } catch (aiError) {
+        // ⚠️ FAIL-SAFE: If AI fails, DO NOT BLOCK USER
+        console.warn("AI Evaluation Failed (Skipping):", aiError);
+        toast.warning("AI busy. Submitted for Manual Review.", { id: toastId });
+
+        // Mark for manual review in DB silently
+        await supabase.from('flowchart_submissions')
+          .update({ status: 'manual_review' })
+          .eq('id', submission.id);
+      }
+
+      // 4. Always Move Forward
       setTimeout(() => {
         completeRound('flowchart');
-        toast.success('Proceeding to Coding Round...');
-      }, 2000);
+        toast.success('Round 2 Complete! Loading Coding Round...');
+      }, 1500);
 
-    } catch (err) {
-      console.error(err);
-      toast.error("Submission failed. Try again.", { id: toastId });
+    } catch (err: any) {
+      console.error("Critical Submission Error:", err);
+      // Only stop if the Database Save itself failed
+      toast.error(`Submission Error: ${err.message}`, { id: toastId });
     } finally {
       setIsSubmitting(false);
     }
   }, [editor, userId, activeProblem, completeRound]);
 
-  // Render Loading State
+  // Loading States
   if (loadingProblem) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4 text-zinc-500">
@@ -188,12 +200,9 @@ export const FlowchartRound = () => {
           )}
 
           <div className="absolute inset-0 tldraw-custom-wrapper">
-            {/* Using default Tldraw. 
-                    'persistenceKey' ensures if they reload, their drawing stays locally (until they submit).
-                */}
             <Tldraw
               persistenceKey={`flowchart-${userId}`}
-              hideUi={false} // Keep UI for tools
+              hideUi={false}
               onMount={handleMount}
             >
               <EditorController onMount={handleMount} />
@@ -233,10 +242,9 @@ export const FlowchartRound = () => {
         <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 flex-1">
           <h3 className="text-xs font-bold text-zinc-500 uppercase mb-3">Canvas Guide</h3>
           <ul className="text-xs text-zinc-400 space-y-2 list-disc pl-4">
-            <li>Use <span className="text-white font-bold">Rectangles</span> for Process.</li>
-            <li>Use <span className="text-white font-bold">Diamonds</span> for Decisions.</li>
-            <li>Use <span className="text-white font-bold">Arrows</span> to connect flow.</li>
-            <li>Double click shapes to add text.</li>
+            <li>Use <span className="text-white font-bold">Shapes</span> from the toolbar.</li>
+            <li>Connect using the <span className="text-white font-bold">Arrow</span> tool.</li>
+            <li>Double click to add text.</li>
             <li>Right click to delete or duplicate.</li>
           </ul>
         </div>

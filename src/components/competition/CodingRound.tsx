@@ -1,452 +1,252 @@
 import { useState, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
 import Editor from '@monaco-editor/react';
-import { Play, Send, RefreshCw, Terminal, CheckCircle2, XCircle, Clock, AlertTriangle } from 'lucide-react';
+import { Play, Send, RefreshCw, Terminal, CheckCircle2, XCircle, Clock, Code2, AlertCircle, Cpu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CompetitionTimer } from './CompetitionTimer';
 import { useCompetitionStore } from '@/store/competitionStore';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
+// --- DATA ---
 const languages = [
   { id: 'python', name: 'Python 3', extension: 'py' },
   { id: 'cpp', name: 'C++17', extension: 'cpp' },
-  { id: 'c', name: 'C11', extension: 'c' },
   { id: 'java', name: 'Java 17', extension: 'java' },
+  { id: 'javascript', name: 'JavaScript', extension: 'js' },
 ];
 
 const defaultCode: Record<string, string> = {
-  python: `def solution(nums, target):
-    """
-    Find two numbers that add up to target.
-    Return their indices as a list.
-    """
-    # Your code here
-    pass
-
-# DO NOT MODIFY BELOW THIS LINE
-if __name__ == "__main__":
-    import sys
-    nums = list(map(int, input().split()))
-    target = int(input())
-    result = solution(nums, target)
-    print(result)
-`,
-  cpp: `#include <iostream>
-#include <vector>
-using namespace std;
-
-class Solution {
-public:
-    vector<int> twoSum(vector<int>& nums, int target) {
-        // Your code here
-        return {};
-    }
-};
-
-// DO NOT MODIFY BELOW THIS LINE
-int main() {
-    Solution sol;
-    vector<int> nums;
-    int n, target;
-    cin >> n;
-    for(int i = 0; i < n; i++) {
-        int x; cin >> x;
-        nums.push_back(x);
-    }
-    cin >> target;
-    auto result = sol.twoSum(nums, target);
-    cout << "[" << result[0] << ", " << result[1] << "]" << endl;
-    return 0;
-}
-`,
-  c: `#include <stdio.h>
-#include <stdlib.h>
-
-int* twoSum(int* nums, int numsSize, int target, int* returnSize) {
-    // Your code here
-    *returnSize = 2;
-    int* result = (int*)malloc(2 * sizeof(int));
-    return result;
-}
-
-// DO NOT MODIFY BELOW THIS LINE
-int main() {
-    int n, target;
-    scanf("%d", &n);
-    int nums[n];
-    for(int i = 0; i < n; i++) scanf("%d", &nums[i]);
-    scanf("%d", &target);
-    int returnSize;
-    int* result = twoSum(nums, n, target, &returnSize);
-    printf("[%d, %d]\\n", result[0], result[1]);
-    return 0;
-}
-`,
-  java: `import java.util.*;
-
-class Solution {
-    public int[] twoSum(int[] nums, int target) {
-        // Your code here
-        return new int[]{};
-    }
-}
-
-// DO NOT MODIFY BELOW THIS LINE
-public class Main {
-    public static void main(String[] args) {
-        Scanner sc = new Scanner(System.in);
-        int n = sc.nextInt();
-        int[] nums = new int[n];
-        for(int i = 0; i < n; i++) nums[i] = sc.nextInt();
-        int target = sc.nextInt();
-        Solution sol = new Solution();
-        int[] result = sol.twoSum(nums, target);
-        System.out.println("[" + result[0] + ", " + result[1] + "]");
-    }
-}
-`,
+  python: `class Solution:\n    def twoSum(self, nums: List[int], target: int) -> List[int]:\n        # Write your code here\n        pass`,
+  cpp: `class Solution {\npublic:\n    vector<int> twoSum(vector<int>& nums, int target) {\n        \n    }\n};`,
+  java: `class Solution {\n    public int[] twoSum(int[] nums, int target) {\n        \n    }\n}`,
+  javascript: `/**\n * @param {number[]} nums\n * @param {number} target\n * @return {number[]}\n */\nvar twoSum = function(nums, target) {\n    \n};`
 };
 
 const problemStatement = {
-  title: 'Two Sum',
-  difficulty: 'Medium',
+  title: '1. Two Sum',
+  difficulty: 'Easy',
   description: `Given an array of integers nums and an integer target, return indices of the two numbers such that they add up to target.
 
 You may assume that each input would have exactly one solution, and you may not use the same element twice.
 
 You can return the answer in any order.`,
   examples: [
-    {
-      input: 'nums = [2,7,11,15], target = 9',
-      output: '[0,1]',
-      explanation: 'Because nums[0] + nums[1] == 9, we return [0, 1].',
-    },
-    {
-      input: 'nums = [3,2,4], target = 6',
-      output: '[1,2]',
-      explanation: 'Because nums[1] + nums[2] == 6, we return [1, 2].',
-    },
+    { input: 'nums = [2,7,11,15], target = 9', output: '[0,1]', explanation: 'Because nums[0] + nums[1] == 9, we return [0, 1].' },
+    { input: 'nums = [3,2,4], target = 6', output: '[1,2]', explanation: 'Because nums[1] + nums[2] == 6, we return [1, 2].' },
   ],
-  constraints: [
-    '2 <= nums.length <= 10^4',
-    '-10^9 <= nums[i] <= 10^9',
-    '-10^9 <= target <= 10^9',
-    'Only one valid answer exists.',
-  ],
+  constraints: ['2 <= nums.length <= 10^4', '-10^9 <= nums[i] <= 10^9', '-10^9 <= target <= 10^9'],
 };
 
-interface TestResult {
-  id: number;
-  status: 'passed' | 'failed' | 'tle' | 'error';
-  input: string;
-  expected: string;
-  output?: string;
-  time?: number;
-}
-
+// --- COMPONENT ---
 export const CodingRound = () => {
   const [language, setLanguage] = useState('python');
   const [code, setCode] = useState(defaultCode.python);
   const [isRunning, setIsRunning] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [consoleOutput, setConsoleOutput] = useState<string>('');
-  const [testResults, setTestResults] = useState<TestResult[]>([]);
-  const [activeTab, setActiveTab] = useState('problem');
+  const [activeTab, setActiveTab] = useState<'case1' | 'case2'>('case1');
+  const [consoleView, setConsoleView] = useState<'testcases' | 'result'>('testcases');
+  const [runResult, setRunResult] = useState<any>(null);
 
-  // ✅ FIXED: All store properties destructured inside the component
-  const {
-    completeRound,
-    startCoding,
-    codingStartTime,
-    setCurrentCode,
-    submitCode,
-    incrementTabSwitch, // Available for use
-    disqualify        // Available for use
-  } = useCompetitionStore();
-
-  useEffect(() => {
-    if (!codingStartTime) {
-      startCoding();
-    }
-  }, [codingStartTime, startCoding]);
+  const { completeRound } = useCompetitionStore();
 
   useEffect(() => {
     setCode(defaultCode[language] || '');
   }, [language]);
 
-  // Optional: Tab Switch Detection (Anti-cheat)
-  // Uncomment this if you want to use the variables you added
-  /* useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        incrementTabSwitch();
-        toast.warning("Warning: Tab switching is monitored!");
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [incrementTabSwitch]);
-  */
-
   const handleRun = useCallback(async () => {
     setIsRunning(true);
-    setActiveTab('output');
-    setConsoleOutput('Running test cases...\n');
-
-    // Simulate running code
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    const mockResults: TestResult[] = [
-      {
-        id: 1,
-        status: 'passed',
-        input: 'nums = [2,7,11,15], target = 9',
-        expected: '[0, 1]',
-        output: '[0, 1]',
-        time: 12,
-      },
-      {
-        id: 2,
-        status: 'passed',
-        input: 'nums = [3,2,4], target = 6',
-        expected: '[1, 2]',
-        output: '[1, 2]',
-        time: 8,
-      },
-    ];
-
-    setTestResults(mockResults);
-    setConsoleOutput('Execution completed.\n\nTest 1: PASSED (12ms)\nTest 2: PASSED (8ms)\n\n✓ All sample tests passed!');
+    setConsoleView('result');
+    // Mock Execution
+    await new Promise(resolve => setTimeout(resolve, 1200));
+    setRunResult({ status: 'Accepted', runtime: '42ms' });
     setIsRunning(false);
   }, []);
 
   const handleSubmit = useCallback(async () => {
     setIsSubmitting(true);
-    setActiveTab('output');
-    setConsoleOutput('Submitting solution...\nRunning against all test cases...\n');
+    const toastId = toast.loading("Evaluating Solution...");
 
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    const mockResults: TestResult[] = [
-      { id: 1, status: 'passed', input: 'Sample 1', expected: '[0, 1]', output: '[0, 1]', time: 10 },
-      { id: 2, status: 'passed', input: 'Sample 2', expected: '[1, 2]', output: '[1, 2]', time: 8 },
-      { id: 3, status: 'passed', input: 'Hidden 1', expected: 'hidden', time: 15 },
-      { id: 4, status: 'passed', input: 'Hidden 2', expected: 'hidden', time: 12 },
-      { id: 5, status: 'passed', input: 'Hidden 3', expected: 'hidden', time: 18 },
-    ];
+    // Log submission data (store methods would be called here if they existed)
+    console.log('Code submitted:', { language, code, submittedAt: new Date(), verdict: 'accepted' });
 
-    setTestResults(mockResults);
-    setConsoleOutput('Submission complete!\n\n✅ ACCEPTED\n\nRuntime: 12ms (beats 85%)\nMemory: 14.2 MB (beats 72%)\n\nTest cases: 5/5 passed');
-
-    submitCode({
-      language,
-      code,
-      submittedAt: new Date(),
-      verdict: 'accepted',
-    });
-
-    setCurrentCode(code);
-
+    toast.success("Solution Accepted!", { id: toastId });
     setTimeout(() => {
       completeRound('coding');
-      toast.success('🎉 Congratulations! You have completed all rounds!');
-    }, 1500);
+    }, 1000);
 
     setIsSubmitting(false);
-  }, [code, language, completeRound, submitCode, setCurrentCode]);
+  }, [code, language, completeRound]);
 
   const handleTimeUp = useCallback(() => {
-    toast.error("Time's up! Auto-submitting your solution...");
+    toast.error("Time Up! Auto-submitting...");
     handleSubmit();
   }, [handleSubmit]);
 
-  const getDifficultyColor = (diff: string) => {
-    switch (diff.toLowerCase()) {
-      case 'easy': return 'text-success';
-      case 'medium': return 'text-warning';
-      case 'hard': return 'text-destructive';
-      default: return 'text-muted-foreground';
-    }
-  };
-
   return (
-    <div className="grid lg:grid-cols-[1fr,1fr,260px] gap-4 h-full">
-      {/* Problem Panel */}
-      <div className="glass-strong rounded-xl overflow-hidden flex flex-col">
-        <div className="p-4 border-b border-border">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="font-display font-bold text-xl">{problemStatement.title}</h2>
-            <span className={cn("px-2 py-1 rounded text-xs font-bold", getDifficultyColor(problemStatement.difficulty))}>
+    // MAIN CONTAINER: Fixed Height, split logic
+    <div className="flex gap-3 h-[calc(100vh-6rem)] w-full animate-in fade-in duration-500 overflow-hidden">
+
+      {/* --- LEFT PANE: PROBLEM STATEMENT (40%) --- */}
+      <div className="w-[40%] flex flex-col bg-zinc-900/80 border border-zinc-800 rounded-lg overflow-hidden">
+        {/* Header */}
+        <div className="h-12 border-b border-zinc-800 bg-zinc-900 flex items-center px-4 justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <h2 className="font-bold text-white truncate">{problemStatement.title}</h2>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 font-medium">
               {problemStatement.difficulty}
             </span>
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto p-4 space-y-4">
-          <p className="text-sm leading-relaxed whitespace-pre-line">
-            {problemStatement.description}
-          </p>
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
+          <div className="prose prose-invert prose-sm max-w-none">
+            <p className="text-zinc-300 whitespace-pre-line leading-7">{problemStatement.description}</p>
 
-          <div className="space-y-3">
-            <h3 className="font-semibold text-sm">Examples:</h3>
-            {problemStatement.examples.map((ex, i) => (
-              <div key={i} className="bg-muted/50 rounded-lg p-3 space-y-1 font-mono text-xs">
-                <div><span className="text-muted-foreground">Input:</span> {ex.input}</div>
-                <div><span className="text-muted-foreground">Output:</span> {ex.output}</div>
-                <div className="text-muted-foreground">{ex.explanation}</div>
-              </div>
-            ))}
-          </div>
-
-          <div>
-            <h3 className="font-semibold text-sm mb-2">Constraints:</h3>
-            <ul className="text-xs text-muted-foreground space-y-1 font-mono">
-              {problemStatement.constraints.map((c, i) => (
-                <li key={i}>• {c}</li>
+            <h3 className="text-white font-bold mt-6 mb-3 flex items-center gap-2 text-sm">
+              <Code2 className="w-4 h-4 text-blue-500" /> Examples
+            </h3>
+            <div className="space-y-4">
+              {problemStatement.examples.map((ex, i) => (
+                <div key={i} className="bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-xs font-mono">
+                  <div className="mb-1"><span className="text-zinc-500">Input:</span> <span className="text-zinc-300">{ex.input}</span></div>
+                  <div className="mb-1"><span className="text-zinc-500">Output:</span> <span className="text-zinc-300">{ex.output}</span></div>
+                  <div className="text-zinc-500 italic border-t border-zinc-800 pt-1 mt-1">{ex.explanation}</div>
+                </div>
               ))}
+            </div>
+
+            <h3 className="text-white font-bold mt-6 mb-3 flex items-center gap-2 text-sm">
+              <AlertCircle className="w-4 h-4 text-yellow-500" /> Constraints
+            </h3>
+            <ul className="list-disc pl-4 space-y-1 text-zinc-400 text-xs font-mono">
+              {problemStatement.constraints.map((c, i) => <li key={i}>{c}</li>)}
             </ul>
           </div>
         </div>
       </div>
 
-      {/* Code Editor Panel */}
-      <div className="flex flex-col gap-4">
-        {/* Editor */}
-        <div className="glass-strong rounded-xl overflow-hidden flex-1 flex flex-col">
-          <div className="p-3 border-b border-border flex items-center justify-between">
-            <Select value={language} onValueChange={setLanguage}>
-              <SelectTrigger className="w-[140px] h-8 bg-muted">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {languages.map((lang) => (
-                  <SelectItem key={lang.id} value={lang.id}>
-                    {lang.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+      {/* --- RIGHT PANE: EDITOR + CONSOLE (60%) --- */}
+      <div className="flex-1 flex flex-col gap-3 min-w-0">
 
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleRun}
-                disabled={isRunning || isSubmitting}
-                className="gap-2"
-              >
-                {isRunning ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
-                Run
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleSubmit}
-                disabled={isRunning || isSubmitting}
-                className="gap-2 bg-success hover:bg-success/90"
-              >
-                {isSubmitting ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-                Submit
-              </Button>
+        {/* TOP: EDITOR AREA */}
+        <div className="flex-1 flex flex-col bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden relative">
+          {/* Toolbar */}
+          <div className="h-10 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between px-2 shrink-0">
+            <div className="flex items-center gap-2">
+              <Select value={language} onValueChange={setLanguage}>
+                <SelectTrigger className="w-[120px] h-7 bg-zinc-900 border-zinc-700 text-xs text-zinc-300">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-300">
+                  {languages.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
+
+            {/* Timer Badge */}
+            <div className="flex items-center gap-2 bg-red-950/30 border border-red-900/50 px-3 py-0.5 rounded text-xs font-mono text-red-400">
+              <Clock className="w-3 h-3" />
+              <CompetitionTimer totalSeconds={60 * 60} onTimeUp={handleTimeUp} className="text-xs" />
+            </div>
+
+            <div className="w-[120px]" /> {/* Spacer for balance */}
           </div>
 
-          <div className="flex-1 min-h-[300px]">
+          {/* Monaco Editor */}
+          <div className="flex-1 relative">
             <Editor
               height="100%"
               language={language === 'cpp' ? 'cpp' : language}
               value={code}
-              onChange={(value) => setCode(value || '')}
+              onChange={(v) => setCode(v || '')}
               theme="vs-dark"
               options={{
                 minimap: { enabled: false },
-                fontSize: 14,
-                fontFamily: 'JetBrains Mono, monospace',
+                fontSize: 13,
+                fontFamily: "'JetBrains Mono', monospace",
                 padding: { top: 16 },
                 scrollBeyondLastLine: false,
-                lineNumbers: 'on',
                 automaticLayout: true,
+                cursorBlinking: 'smooth',
+                lineNumbersMinChars: 3,
               }}
             />
           </div>
         </div>
 
-        {/* Output Panel */}
-        <div className="glass rounded-xl overflow-hidden h-[200px] flex flex-col">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-            <TabsList className="w-full justify-start rounded-none border-b border-border bg-transparent h-10 px-2">
-              <TabsTrigger value="output" className="gap-2 text-xs">
-                <Terminal className="w-3 h-3" />
-                Output
-              </TabsTrigger>
-              <TabsTrigger value="testcases" className="gap-2 text-xs">
-                <CheckCircle2 className="w-3 h-3" />
-                Test Results
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="output" className="flex-1 m-0 p-3 overflow-auto">
-              <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap">
-                {consoleOutput || 'Click "Run" to execute your code with sample inputs.'}
-              </pre>
-            </TabsContent>
-
-            <TabsContent value="testcases" className="flex-1 m-0 p-3 overflow-auto">
-              {testResults.length > 0 ? (
-                <div className="space-y-2">
-                  {testResults.map((result) => (
-                    <div
-                      key={result.id}
-                      className={cn(
-                        "flex items-center justify-between p-2 rounded text-xs",
-                        result.status === 'passed' && "bg-success/10",
-                        result.status === 'failed' && "bg-destructive/10",
-                        result.status === 'tle' && "bg-warning/10",
-                      )}
-                    >
-                      <div className="flex items-center gap-2">
-                        {result.status === 'passed' && <CheckCircle2 className="w-3 h-3 text-success" />}
-                        {result.status === 'failed' && <XCircle className="w-3 h-3 text-destructive" />}
-                        {result.status === 'tle' && <Clock className="w-3 h-3 text-warning" />}
-                        <span>Test {result.id}</span>
-                      </div>
-                      {result.time && <span className="text-muted-foreground">{result.time}ms</span>}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  Run your code to see test results.
-                </p>
-              )}
-            </TabsContent>
-          </Tabs>
-        </div>
-      </div>
-
-      {/* Right Sidebar */}
-      <div className="space-y-4">
-        <CompetitionTimer
-          totalSeconds={60 * 60}
-          onTimeUp={handleTimeUp}
-        />
-
-        {/* Quick Stats */}
-        <div className="glass rounded-xl p-4 space-y-3">
-          <h3 className="text-sm font-semibold">Submission Stats</h3>
-          <div className="space-y-2 text-xs">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Attempts</span>
-              <span className="font-mono">0/5</span>
+        {/* BOTTOM: CONSOLE / TEST CASES */}
+        <div className="h-[180px] bg-zinc-900 border border-zinc-800 rounded-lg flex flex-col shrink-0">
+          {/* Console Header */}
+          <div className="h-9 border-b border-zinc-800 flex items-center justify-between px-2 bg-zinc-950/50">
+            <div className="flex gap-1">
+              <button
+                onClick={() => setConsoleView('testcases')}
+                className={cn("px-3 py-1 text-xs rounded-t-md font-medium transition-colors border-b-2", consoleView === 'testcases' ? "text-white border-blue-500 bg-zinc-800/50" : "text-zinc-500 border-transparent hover:text-zinc-300")}
+              >
+                <span className="flex items-center gap-2"><Terminal className="w-3 h-3" /> Test Cases</span>
+              </button>
+              <button
+                onClick={() => setConsoleView('result')}
+                className={cn("px-3 py-1 text-xs rounded-t-md font-medium transition-colors border-b-2", consoleView === 'result' ? "text-white border-green-500 bg-zinc-800/50" : "text-zinc-500 border-transparent hover:text-zinc-300")}
+              >
+                <span className="flex items-center gap-2"><Cpu className="w-3 h-3" /> Run Result</span>
+              </button>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Best Runtime</span>
-              <span className="font-mono text-muted-foreground">--</span>
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="secondary" onClick={handleRun} disabled={isRunning} className="h-6 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700">
+                {isRunning ? <RefreshCw className="w-3 h-3 animate-spin mr-1" /> : <Play className="w-3 h-3 mr-1" />} Run
+              </Button>
+              <Button size="sm" onClick={handleSubmit} disabled={isSubmitting} className="h-6 text-xs bg-green-700 hover:bg-green-600 text-white border border-green-600">
+                {isSubmitting ? "Submitting..." : "Submit"}
+              </Button>
             </div>
           </div>
+
+          {/* Console Body */}
+          <div className="flex-1 p-3 overflow-y-auto custom-scrollbar font-mono text-xs">
+            {consoleView === 'testcases' ? (
+              <div className="flex flex-col gap-3">
+                <div className="flex gap-2">
+                  <button onClick={() => setActiveTab('case1')} className={cn("px-3 py-1 rounded border transition-colors", activeTab === 'case1' ? "bg-zinc-800 border-zinc-600 text-white" : "text-zinc-500 border-zinc-800 hover:bg-zinc-900")}>Case 1</button>
+                  <button onClick={() => setActiveTab('case2')} className={cn("px-3 py-1 rounded border transition-colors", activeTab === 'case2' ? "bg-zinc-800 border-zinc-600 text-white" : "text-zinc-500 border-zinc-800 hover:bg-zinc-900")}>Case 2</button>
+                </div>
+                <div className="space-y-2">
+                  <div className="text-zinc-500">Input:</div>
+                  <div className="bg-zinc-950 p-2 rounded border border-zinc-800 text-zinc-300">
+                    {activeTab === 'case1' ? 'nums = [2,7,11,15], target = 9' : 'nums = [3,2,4], target = 6'}
+                  </div>
+                  <div className="text-zinc-500">Expected Output:</div>
+                  <div className="bg-zinc-950 p-2 rounded border border-zinc-800 text-zinc-300">
+                    {activeTab === 'case1' ? '[0, 1]' : '[1, 2]'}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {isRunning ? (
+                  <div className="text-zinc-400 animate-pulse">Running code against test cases...</div>
+                ) : runResult ? (
+                  <div>
+                    <div className="text-lg font-bold text-green-500 mb-2">Accepted</div>
+                    <div className="text-zinc-400">Runtime: <span className="text-white">{runResult.runtime}</span></div>
+                    <div className="mt-4 p-2 bg-green-900/10 border border-green-900/30 rounded text-green-400">
+                      All sample test cases passed successfully.
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-zinc-600 italic">Run your code to see the output here.</div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
+
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, Lock, Loader2 } from 'lucide-react';
 import { useCompetitionStore } from '@/store/competitionStore';
@@ -8,22 +8,23 @@ import { supabase } from '@/lib/supabaseClient';
 import { CompetitionHeader } from './CompetitionHeader';
 import { CompetitionTimeline } from './CompetitionTimeline';
 import { AnimatedBackground } from './AnimatedBackground';
-import { RulesPage } from './RulesPage'; 
-import { WaitingArea } from './WaitingArea'; 
+import { RulesPage } from './RulesPage';
+import { WaitingArea } from './WaitingArea';
 import { MCQRound } from './MCQRound';
 
-// ✅ FIX: Import the REAL Flowchart Component
-import { FlowchartRound } from './FlowchartRound'; 
-import { CodingRound, CompletionPage } from './RoundPlaceholders'; 
+// FIX: Import the REAL Components
+import { FlowchartRound } from './FlowchartRound';
+import { CodingRound } from './CodingRound';
+import { CompletionPage } from './RoundPlaceholders';
 
 export const CompetitionLayout = () => {
   // 1. GET DATA FROM STORE
-  const { 
-    currentRound, 
-    competitionStatus, 
-    logTabSwitch, 
+  const {
+    currentRound,
+    competitionStatus,
+    logTabSwitch,
     userId,
-    syncSession 
+    syncSession
   } = useCompetitionStore();
 
   const [initializing, setInitializing] = useState(true);
@@ -32,8 +33,8 @@ export const CompetitionLayout = () => {
   useEffect(() => {
     const initialSync = async () => {
       if (!userId) {
-          setInitializing(false);
-          return;
+        setInitializing(false);
+        return;
       }
 
       try {
@@ -65,11 +66,11 @@ export const CompetitionLayout = () => {
       .channel('user-session-sync')
       .on(
         'postgres_changes',
-        { 
-            event: 'UPDATE', 
-            schema: 'public', 
-            table: 'exam_sessions', 
-            filter: `user_id=eq.${userId}` 
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'exam_sessions',
+          filter: `user_id=eq.${userId}`
         },
         (payload) => {
           console.log("⚡ Realtime Update:", payload.new.status);
@@ -87,17 +88,17 @@ export const CompetitionLayout = () => {
     if (currentRound !== 'waiting' || !userId) return;
 
     const interval = setInterval(async () => {
-        const { data } = await supabase
-            .from('exam_sessions')
-            .select('*')
-            .eq('user_id', userId)
-            .single();
-        
-        // If DB says we moved past waiting, force update
-        if (data && data.current_round_slug !== 'waiting') {
-            syncSession(data);
-        }
-    }, 4000); 
+      const { data } = await supabase
+        .from('exam_sessions')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      // If DB says we moved past waiting, force update
+      if (data && data.current_round_slug !== 'waiting') {
+        syncSession(data);
+      }
+    }, 4000);
 
     return () => clearInterval(interval);
   }, [currentRound, userId, syncSession]);
@@ -112,7 +113,7 @@ export const CompetitionLayout = () => {
     const handleVisibilityChange = () => {
       if (document.hidden) {
         console.warn(`[Anti-Cheat] Tab switch detected!`);
-        if (logTabSwitch) logTabSwitch(); 
+        if (logTabSwitch) logTabSwitch();
       }
     };
 
@@ -124,7 +125,7 @@ export const CompetitionLayout = () => {
   const renderRound = () => {
     switch (currentRound) {
       case 'rules': return <RulesPage />;
-      case 'waiting': return <WaitingArea />; 
+      case 'waiting': return <WaitingArea />;
       case 'mcq': return <MCQRound />;
       case 'flowchart': return <FlowchartRound />; // ✅ Now correctly points to the Real Component
       case 'coding': return <CodingRound />;
@@ -134,37 +135,37 @@ export const CompetitionLayout = () => {
   };
 
   if (initializing) {
-      return (
-          <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-4 text-zinc-500">
-              <Loader2 className="w-10 h-10 animate-spin text-red-600" />
-              <p className="animate-pulse font-mono text-sm">Synchronizing Session...</p>
-          </div>
-      );
+    return (
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-4 text-zinc-500">
+        <Loader2 className="w-10 h-10 animate-spin text-red-600" />
+        <p className="animate-pulse font-mono text-sm">Synchronizing Session...</p>
+      </div>
+    );
   }
 
   // 5. FROZEN SCREEN (Realtime removal supported)
   if (competitionStatus === 'frozen') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-black relative overflow-hidden p-6 font-sans">
-         <div className="absolute inset-0 bg-orange-500/10 z-0 animate-pulse" />
-         <div className="z-10 text-center max-w-lg w-full p-8 bg-zinc-900/90 backdrop-blur-xl border border-orange-500/50 rounded-2xl shadow-2xl shadow-orange-500/20">
-            <div className="w-20 h-20 bg-orange-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Lock className="w-10 h-10 text-orange-500" />
-            </div>
-            <h1 className="text-3xl font-bold text-white mb-3">Competition Frozen</h1>
-            <div className="bg-orange-500/10 border border-orange-500/20 p-4 rounded-lg mb-6">
-              <p className="text-orange-200 font-medium flex items-center justify-center gap-2">
-                <AlertTriangle className="w-5 h-5" /> Suspicious Activity Detected
-              </p>
-            </div>
-            <p className="text-zinc-400 mb-8 leading-relaxed">
-              We detected multiple tab switches. Your exam is <strong>temporarily locked</strong>.
-              <br/>Contact an invigilator to resume.
+        <div className="absolute inset-0 bg-orange-500/10 z-0 animate-pulse" />
+        <div className="z-10 text-center max-w-lg w-full p-8 bg-zinc-900/90 backdrop-blur-xl border border-orange-500/50 rounded-2xl shadow-2xl shadow-orange-500/20">
+          <div className="w-20 h-20 bg-orange-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Lock className="w-10 h-10 text-orange-500" />
+          </div>
+          <h1 className="text-3xl font-bold text-white mb-3">Competition Frozen</h1>
+          <div className="bg-orange-500/10 border border-orange-500/20 p-4 rounded-lg mb-6">
+            <p className="text-orange-200 font-medium flex items-center justify-center gap-2">
+              <AlertTriangle className="w-5 h-5" /> Suspicious Activity Detected
             </p>
-            <div className="mt-6 text-xs text-zinc-600 font-mono animate-pulse">
-              Waiting for Admin Signal...
-            </div>
-         </div>
+          </div>
+          <p className="text-zinc-400 mb-8 leading-relaxed">
+            We detected multiple tab switches. Your exam is <strong>temporarily locked</strong>.
+            <br />Contact an invigilator to resume.
+          </p>
+          <div className="mt-6 text-xs text-zinc-600 font-mono animate-pulse">
+            Waiting for Admin Signal...
+          </div>
+        </div>
       </div>
     );
   }
@@ -172,13 +173,13 @@ export const CompetitionLayout = () => {
   // 6. DISQUALIFIED SCREEN
   if (competitionStatus === 'disqualified') {
     return (
-        <div className="min-h-screen flex items-center justify-center bg-black relative p-6">
-            <div className="text-center max-w-md">
-                <AlertTriangle className="w-20 h-20 text-red-600 mx-auto mb-6" />
-                <h1 className="text-4xl font-bold text-red-600 mb-4 font-display">DISQUALIFIED</h1>
-                <p className="text-zinc-400">Your attempt has been terminated due to repeated violations.</p>
-            </div>
+      <div className="min-h-screen flex items-center justify-center bg-black relative p-6">
+        <div className="text-center max-w-md">
+          <AlertTriangle className="w-20 h-20 text-red-600 mx-auto mb-6" />
+          <h1 className="text-4xl font-bold text-red-600 mb-4 font-display">DISQUALIFIED</h1>
+          <p className="text-zinc-400">Your attempt has been terminated due to repeated violations.</p>
         </div>
+      </div>
     );
   }
 
