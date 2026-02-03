@@ -8,12 +8,14 @@ interface CompetitionTimerProps {
   totalSeconds: number;
   onTimeUp?: () => void;
   isActive?: boolean;
+  className?: string;
 }
 
 export const CompetitionTimer = ({
   totalSeconds,
   onTimeUp,
   isActive = true,
+  className,
 }: CompetitionTimerProps) => {
   const [timeRemaining, setTimeRemaining] = useState(totalSeconds);
   const { tabSwitchCount, currentRound } = useCompetitionStore();
@@ -41,14 +43,14 @@ export const CompetitionTimer = ({
   const isCritical = timeRemaining < 60; // Less than 1 minute
 
   return (
-    <div className="glass-strong rounded-xl p-6 space-y-4">
+    <div className={cn("glass-strong rounded-xl p-6 space-y-4", className)}>
       {/* Timer Display */}
       <div className="text-center">
         <div className="flex items-center justify-center gap-2 text-muted-foreground text-sm mb-2">
           <Clock className="w-4 h-4" />
           <span>Time Remaining</span>
         </div>
-        
+
         <motion.div
           className={cn(
             "font-display text-5xl font-bold tracking-wider",
@@ -82,9 +84,9 @@ export const CompetitionTimer = ({
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">Current Round</span>
           <span className="font-semibold text-primary capitalize">
-            {currentRound === 'mcq' ? 'Aptitude MCQ' : 
-             currentRound === 'flowchart' ? 'Flowchart Design' :
-             currentRound === 'coding' ? 'DSA Coding' : currentRound}
+            {currentRound === 'mcq' ? 'Aptitude MCQ' :
+              currentRound === 'flowchart' ? 'Flowchart Design' :
+                currentRound === 'coding' ? 'DSA Coding' : currentRound}
           </span>
         </div>
 
