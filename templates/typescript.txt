@@ -1,0 +1,16 @@
+{{USER_CODE}}
+
+// Test Runner
+const testCases = {{TEST_CASES_JSON}};
+
+const startTime = performance.now();
+testCases.forEach((tc: any, index: number) => {
+    try {
+        const result = {{FUNCTION_NAME}}(tc.nums, tc.target);
+        console.log(`Test Case ${index + 1}: ${JSON.stringify(result)}`);
+    } catch (e: any) {
+            console.log(`Test Case ${index + 1}: Error - ${e.message}`);
+    }
+});
+const endTime = performance.now();
+console.log(`METRICS: TIME=${(endTime - startTime).toFixed(4)}ms`);

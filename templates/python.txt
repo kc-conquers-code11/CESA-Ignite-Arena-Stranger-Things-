@@ -1,0 +1,20 @@
+from typing import List, Dict, Optional, Any
+import json
+import time
+
+{{USER_CODE}}
+
+# Test Runner
+test_cases = {{TEST_CASES_JSON}}
+
+start_time = time.time()
+for i, tc in enumerate(test_cases):
+    try:
+        result = {{FUNCTION_NAME}}(tc["nums"], tc["target"])
+        # Format list outputs to match JS JSON.stringify format for consistency
+        res_str = json.dumps(result).replace(" ", "") 
+        print(f"Test Case {i+1}: {res_str}")
+    except Exception as e:
+        print(f"Test Case {i+1}: Error - {e}")
+end_time = time.time()
+print(f"METRICS: TIME={(end_time - start_time) * 1000}ms")
