@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabaseClient';
 import {
     Shield, RefreshCw, Play, Ban, Search,
     Plus, Trash2, AlertTriangle, LogOut,
-    Activity, Workflow, CheckCircle, Eye, X, FileJson, Cpu
+    Activity, Workflow, CheckCircle, CheckCircle2, Eye, X, FileJson, Cpu, Code
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,12 +29,15 @@ interface Participant {
 
 interface Question {
     id: string;
-    type: 'mcq' | 'coding';
+    round_id: 'mcq' | 'coding';
     title: string;
     description: string;
     options?: string[];
     correct_answer?: string;
     difficulty: string;
+    code_snippet?: string;
+    examples?: Array<{input: string; output: string; explanation: string}>;
+    constraints?: string[];
 }
 
 interface FlowchartProblem {
@@ -72,12 +75,26 @@ export default function AdminPanel() {
     const [loadingInspection, setLoadingInspection] = useState(false);
 
     const [newQ, setNewQ] = useState({
-        type: 'mcq',
+        round_id: 'mcq',
         title: '',
         description: '',
         optionA: '', optionB: '', optionC: '', optionD: '',
         correct: '',
-        difficulty: 'easy'
+        difficulty: 'easy',
+        // For coding problems
+        code_snippet: '',
+        example1_input: '', example1_output: '', example1_explanation: '',
+        example2_input: '', example2_output: '', example2_explanation: '',
+        constraint1: '', constraint2: '', constraint3: ''
+    });
+
+    const [newFlowchart, setNewFlowchart] = useState({
+        title: '',
+        description: '',
+        req1: '',
+        req2: '',
+        req3: '',
+        req4: ''
     });
 
     // ---------------------------------------------------------
@@ -199,8 +216,65 @@ export default function AdminPanel() {
 
     const startExam = async () => {
         if (!confirm("⚠️ START EXAM?")) return;
-        await supabase.from('exam_sessions').update({ current_round_slug: 'mcq', status: 'active' }).eq('current_round_slug', 'waiting');
-        toast.success("EXAM STARTED!");
+        setLoading(true);
+        const toastId = toast.loading("Starting Round 1...");
+        
+        const { data, error } = await supabase
+            .from('exam_sessions')
+            .update({ current_round_slug: 'mcq', status: 'active' })
+            .eq('current_round_slug', 'waiting')
+            .select();
+        
+        if (error) {
+            toast.error("Failed to start round", { id: toastId });
+        } else {
+            const count = data?.length || 0;
+            toast.success(`Round 1 Started! ${count} participant(s) moved to MCQ`, { id: toastId });
+            fetchData();
+        }
+        setLoading(false);
+    };
+
+    const startRound2 = async () => {
+        if (!confirm("⚠️ START ROUND 2 (FLOWCHART)?")) return;
+        setLoading(true);
+        const toastId = toast.loading("Starting Round 2...");
+        
+        const { data, error } = await supabase
+            .from('exam_sessions')
+            .update({ current_round_slug: 'flowchart', status: 'active' })
+            .eq('current_round_slug', 'mcq')
+            .select();
+        
+        if (error) {
+            toast.error("Failed to start round", { id: toastId });
+        } else {
+            const count = data?.length || 0;
+            toast.success(`Round 2 Started! ${count} participant(s) moved to Flowchart`, { id: toastId });
+            fetchData();
+        }
+        setLoading(false);
+    };
+
+    const startRound3 = async () => {
+        if (!confirm("⚠️ START ROUND 3 (CODING)?")) return;
+        setLoading(true);
+        const toastId = toast.loading("Starting Round 3...");
+        
+        const { data, error } = await supabase
+            .from('exam_sessions')
+            .update({ current_round_slug: 'coding', status: 'active' })
+            .eq('current_round_slug', 'flowchart')
+            .select();
+        
+        if (error) {
+            toast.error("Failed to start round", { id: toastId });
+        } else {
+            const count = data?.length || 0;
+            toast.success(`Round 3 Started! ${count} participant(s) moved to Coding`, { id: toastId });
+            fetchData();
+        }
+        setLoading(false);
     };
 
     const resetAllToWaiting = async () => {
@@ -211,13 +285,95 @@ export default function AdminPanel() {
 
     const handleAddQuestion = async () => {
         if (!newQ.title) return toast.error("Title required");
-        const payload: any = { type: newQ.type, title: newQ.title, description: newQ.description, difficulty: newQ.difficulty };
-        if (newQ.type === 'mcq') {
-            payload.options = [newQ.optionA, newQ.optionB, newQ.optionC, newQ.optionD];
+        
+        const payload: any = { 
+            round_id: newQ.round_id, 
+            title: newQ.title, 
+            description: newQ.description, 
+            difficulty: newQ.difficulty 
+        };
+        
+        if (newQ.round_id === 'mcq') {
+            payload.options = [newQ.optionA, newQ.optionB, newQ.optionC, newQ.optionD].filter(o => o.trim());
             payload.correct_answer = newQ.correct;
+        } else if (newQ.round_id === 'coding') {
+            payload.code_snippet = newQ.code_snippet;
+            
+            // Build examples array
+            const examples = [];
+            if (newQ.example1_input && newQ.example1_output) {
+                examples.push({
+                    input: newQ.example1_input,
+                    output: newQ.example1_output,
+                    explanation: newQ.example1_explanation
+                });
+            }
+            if (newQ.example2_input && newQ.example2_output) {
+                examples.push({
+                    input: newQ.example2_input,
+                    output: newQ.example2_output,
+                    explanation: newQ.example2_explanation
+                });
+            }
+            payload.examples = examples;
+            
+            // Build constraints array
+            payload.constraints = [newQ.constraint1, newQ.constraint2, newQ.constraint3].filter(c => c.trim());
         }
+        
         const { error } = await supabase.from('questions').insert(payload);
-        if (!error) { toast.success("Question Added"); setNewQ({ ...newQ, title: '', description: '', correct: '' }); fetchData(); }
+        if (!error) { 
+            toast.success("Question Added"); 
+            setNewQ({ 
+                round_id: 'mcq',
+                title: '', 
+                description: '', 
+                optionA: '', optionB: '', optionC: '', optionD: '',
+                correct: '',
+                difficulty: 'easy',
+                code_snippet: '',
+                example1_input: '', example1_output: '', example1_explanation: '',
+                example2_input: '', example2_output: '', example2_explanation: '',
+                constraint1: '', constraint2: '', constraint3: ''
+            }); 
+            fetchData(); 
+        }
+    };
+
+    const handleAddFlowchart = async () => {
+        if (!newFlowchart.title) return toast.error("Title required");
+        
+        const requirements = [
+            newFlowchart.req1,
+            newFlowchart.req2,
+            newFlowchart.req3,
+            newFlowchart.req4
+        ].filter(r => r.trim());
+
+        if (requirements.length === 0) return toast.error("Add at least one requirement");
+
+        const payload = {
+            title: newFlowchart.title,
+            description: newFlowchart.description,
+            requirements: requirements,
+            is_active: false
+        };
+
+        const { error } = await supabase.from('flowchart_problems').insert(payload);
+        if (!error) {
+            toast.success("Flowchart Problem Added");
+            setNewFlowchart({
+                title: '',
+                description: '',
+                req1: '',
+                req2: '',
+                req3: '',
+                req4: ''
+            });
+            fetchData();
+        } else {
+            toast.error("Failed to add flowchart problem");
+        }
     };
 
     const deleteQuestion = async (id: string, table: 'questions' | 'flowchart_problems') => {
@@ -321,12 +477,83 @@ export default function AdminPanel() {
 
                 {/* ======================= CONTROLS TAB ======================= */}
                 {activeTab === 'controls' && (
-                    <div className="grid md:grid-cols-2 gap-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
-                        <div className="bg-zinc-900/80 border border-green-900/50 p-8 rounded-2xl relative overflow-hidden group hover:border-green-600/50 transition-colors">
-                            <h3 className="text-xl font-bold text-green-400 mb-2 flex items-center gap-2"><Play className="w-5 h-5" /> Start Competition</h3>
-                            <p className="text-zinc-400 mb-6 text-sm">Moves everyone from <strong>Waiting Room</strong> to <strong>Round 1 (MCQ)</strong>.</p>
-                            <Button onClick={startExam} disabled={loading} className="w-full bg-green-600 hover:bg-green-500 text-white font-bold h-12">{loading ? "Processing..." : "START ROUND 1"}</Button>
+                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                        {/* Round Controls Grid */}
+                        <div className="grid md:grid-cols-3 gap-6">
+                            {/* ROUND 1 */}
+                            <div className="bg-zinc-900/80 border border-green-900/50 p-6 rounded-2xl relative overflow-hidden group hover:border-green-600/50 transition-colors">
+                                <h3 className="text-lg font-bold text-green-400 mb-2 flex items-center gap-2"><Play className="w-5 h-5" /> Start Round 1</h3>
+                                <p className="text-zinc-400 mb-2 text-xs">Moves everyone from <strong>Waiting Room</strong> to <strong>MCQ Round</strong>.</p>
+                                
+                                {/* Live Stats */}
+                                <div className="flex items-center gap-4 mb-4 text-xs">
+                                    <div className="flex items-center gap-1.5">
+                                        <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                                        <span className="text-zinc-500">Waiting:</span>
+                                        <span className="font-bold text-white">{participants.filter(p => p.current_round_slug === 'waiting').length}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                                        <span className="text-zinc-500">In MCQ:</span>
+                                        <span className="font-bold text-white">{participants.filter(p => p.current_round_slug === 'mcq').length}</span>
+                                    </div>
+                                </div>
+                                
+                                <Button onClick={startExam} disabled={loading} className="w-full bg-green-600 hover:bg-green-500 text-white font-bold h-10 text-sm">
+                                    {loading ? "Processing..." : "START ROUND 1"}
+                                </Button>
+                            </div>
+
+                            {/* ROUND 2 */}
+                            <div className="bg-zinc-900/80 border border-yellow-900/50 p-6 rounded-2xl relative overflow-hidden group hover:border-yellow-600/50 transition-colors">
+                                <h3 className="text-lg font-bold text-yellow-400 mb-2 flex items-center gap-2"><Workflow className="w-5 h-5" /> Start Round 2</h3>
+                                <p className="text-zinc-400 mb-2 text-xs">Moves everyone from <strong>MCQ</strong> to <strong>Flowchart Round</strong>.</p>
+                                
+                                {/* Live Stats */}
+                                <div className="flex items-center gap-4 mb-4 text-xs">
+                                    <div className="flex items-center gap-1.5">
+                                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                                        <span className="text-zinc-500">In MCQ:</span>
+                                        <span className="font-bold text-white">{participants.filter(p => p.current_round_slug === 'mcq').length}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <div className="w-2 h-2 rounded-full bg-yellow-500"></div>
+                                        <span className="text-zinc-500">In Flowchart:</span>
+                                        <span className="font-bold text-white">{participants.filter(p => p.current_round_slug === 'flowchart').length}</span>
+                                    </div>
+                                </div>
+                                
+                                <Button onClick={startRound2} disabled={loading} className="w-full bg-yellow-600 hover:bg-yellow-500 text-black font-bold h-10 text-sm">
+                                    {loading ? "Processing..." : "START ROUND 2"}
+                                </Button>
+                            </div>
+
+                            {/* ROUND 3 */}
+                            <div className="bg-zinc-900/80 border border-purple-900/50 p-6 rounded-2xl relative overflow-hidden group hover:border-purple-600/50 transition-colors">
+                                <h3 className="text-lg font-bold text-purple-400 mb-2 flex items-center gap-2"><Code className="w-5 h-5" /> Start Round 3</h3>
+                                <p className="text-zinc-400 mb-2 text-xs">Moves everyone from <strong>Flowchart</strong> to <strong>Coding Round</strong>.</p>
+                                
+                                {/* Live Stats */}
+                                <div className="flex items-center gap-4 mb-4 text-xs">
+                                    <div className="flex items-center gap-1.5">
+                                        <div className="w-2 h-2 rounded-full bg-yellow-500"></div>
+                                        <span className="text-zinc-500">In Flowchart:</span>
+                                        <span className="font-bold text-white">{participants.filter(p => p.current_round_slug === 'flowchart').length}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <div className="w-2 h-2 rounded-full bg-purple-500"></div>
+                                        <span className="text-zinc-500">In Coding:</span>
+                                        <span className="font-bold text-white">{participants.filter(p => p.current_round_slug === 'coding').length}</span>
+                                    </div>
+                                </div>
+                                
+                                <Button onClick={startRound3} disabled={loading} className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold h-10 text-sm">
+                                    {loading ? "Processing..." : "START ROUND 3"}
+                                </Button>
+                            </div>
                         </div>
+
+                        {/* Emergency Reset */}
                         <div className="bg-zinc-900/80 border border-red-900/50 p-8 rounded-2xl relative overflow-hidden group hover:border-red-600/50 transition-colors">
                             <h3 className="text-xl font-bold text-red-500 mb-2 flex items-center gap-2"><AlertTriangle className="w-5 h-5" /> Emergency Reset</h3>
                             <p className="text-zinc-400 mb-6 text-sm">Pulls everyone back to <strong>Waiting Room</strong>.</p>
@@ -337,51 +564,206 @@ export default function AdminPanel() {
 
                 {/* ======================= QUESTIONS TAB ======================= */}
                 {activeTab === 'questions' && (
-                    <div className="grid lg:grid-cols-[1fr,1fr] gap-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
-                        <div className="space-y-6">
-                            <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl shadow-xl">
-                                <h3 className="font-bold text-white mb-4 flex items-center gap-2 text-lg"><Plus className="w-5 h-5 text-blue-500" /> Add Standard Question</h3>
-                                <div className="space-y-4">
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <Button variant="outline" onClick={() => setNewQ({ ...newQ, type: 'mcq' })} className={cn(newQ.type === 'mcq' && "bg-blue-600 border-blue-600 text-white")}>MCQ</Button>
-                                        <Button variant="outline" onClick={() => setNewQ({ ...newQ, type: 'coding' })} className={cn(newQ.type === 'coding' && "bg-purple-600 border-purple-600 text-white")}>Coding</Button>
-                                    </div>
-                                    <Input placeholder="Title" className="bg-black border-zinc-700" value={newQ.title} onChange={e => setNewQ({ ...newQ, title: e.target.value })} />
-                                    <Textarea placeholder="Description" className="bg-black border-zinc-700" value={newQ.description} onChange={e => setNewQ({ ...newQ, description: e.target.value })} />
-                                    {newQ.type === 'mcq' && (
-                                        <div className="space-y-2 bg-zinc-950 p-3 rounded border border-zinc-800">
-                                            <p className="text-xs font-bold text-zinc-500">OPTIONS</p>
-                                            {['A', 'B', 'C', 'D'].map(opt => (<Input key={opt} placeholder={`Option ${opt}`} className="h-8 bg-zinc-900 border-zinc-700" value={(newQ as any)[`option${opt}`]} onChange={e => setNewQ({ ...newQ, [`option${opt}`]: e.target.value })} />))}
-                                            <Input placeholder="Correct Answer" className="h-8 bg-green-900/20 border-green-900 text-green-400" value={newQ.correct} onChange={e => setNewQ({ ...newQ, correct: e.target.value })} />
-                                        </div>
-                                    )}
-                                    <Button onClick={handleAddQuestion} className="w-full bg-white hover:bg-zinc-200 text-black font-bold">Save Question</Button>
+                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                        {/* Add Question Form */}
+                        <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl shadow-xl">
+                            <h3 className="font-bold text-white mb-4 flex items-center gap-2 text-lg"><Plus className="w-5 h-5 text-blue-500" /> Add Standard Question</h3>
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-2">
+                                    <Button variant="outline" onClick={() => setNewQ({ ...newQ, round_id: 'mcq' })} className={cn(newQ.round_id === 'mcq' && "bg-blue-600 border-blue-600 text-white")}>MCQ</Button>
+                                    <Button variant="outline" onClick={() => setNewQ({ ...newQ, round_id: 'coding' })} className={cn(newQ.round_id === 'coding' && "bg-purple-600 border-purple-600 text-white")}>Coding</Button>
                                 </div>
-                            </div>
-                            {/* List */}
-                            <div className="space-y-2">
-                                {questions.map(q => (
-                                    <div key={q.id} className="bg-zinc-900/50 border border-zinc-800 p-3 rounded-lg flex justify-between items-center">
-                                        <div><span className={cn("text-[10px] px-2 py-0.5 rounded font-bold mr-2", q.type === 'mcq' ? "bg-blue-900/30 text-blue-400" : "bg-purple-900/30 text-purple-400")}>{q.type}</span><span className="text-sm font-bold text-zinc-300">{q.title}</span></div>
-                                        <Button size="icon" variant="ghost" onClick={() => deleteQuestion(q.id, 'questions')}><Trash2 className="w-4 h-4 text-zinc-600 hover:text-red-500" /></Button>
+                                <Input placeholder="Title" className="bg-black border-zinc-700" value={newQ.title} onChange={e => setNewQ({ ...newQ, title: e.target.value })} />
+                                <Textarea placeholder="Description" className="bg-black border-zinc-700 min-h-[80px]" value={newQ.description} onChange={e => setNewQ({ ...newQ, description: e.target.value })} />
+                                
+                                {newQ.round_id === 'mcq' && (
+                                    <div className="space-y-2 bg-zinc-950 p-3 rounded border border-zinc-800">
+                                        <p className="text-xs font-bold text-zinc-500">OPTIONS</p>
+                                        {['A', 'B', 'C', 'D'].map(opt => (<Input key={opt} placeholder={`Option ${opt}`} className="h-8 bg-zinc-900 border-zinc-700" value={(newQ as any)[`option${opt}`]} onChange={e => setNewQ({ ...newQ, [`option${opt}`]: e.target.value })} />))}
+                                        <Input placeholder="Correct Answer" className="h-8 bg-green-900/20 border-green-900 text-green-400" value={newQ.correct} onChange={e => setNewQ({ ...newQ, correct: e.target.value })} />
                                     </div>
-                                ))}
+                                )}
+                                
+                                {newQ.round_id === 'coding' && (
+                                    <div className="space-y-3 bg-zinc-950 p-4 rounded border border-zinc-800">
+                                        <p className="text-xs font-bold text-purple-400">CODING PROBLEM DETAILS</p>
+                                        
+                                        <div>
+                                            <label className="text-xs text-zinc-500 mb-1 block">Code Snippet (Default Template)</label>
+                                            <Textarea placeholder="def twoSum(nums, target):\n    # Write your code here\n    pass" className="bg-zinc-900 border-zinc-700 font-mono text-xs min-h-[100px]" value={newQ.code_snippet} onChange={e => setNewQ({ ...newQ, code_snippet: e.target.value })} />
+                                        </div>
+                                        
+                                        <div className="space-y-2">
+                                            <p className="text-xs font-bold text-zinc-500">Example 1</p>
+                                            <Input placeholder="Input: nums = [2,7,11,15], target = 9" className="h-8 bg-zinc-900 border-zinc-700 text-xs" value={newQ.example1_input} onChange={e => setNewQ({ ...newQ, example1_input: e.target.value })} />
+                                            <Input placeholder="Output: [0,1]" className="h-8 bg-zinc-900 border-zinc-700 text-xs" value={newQ.example1_output} onChange={e => setNewQ({ ...newQ, example1_output: e.target.value })} />
+                                            <Input placeholder="Explanation: Because nums[0] + nums[1] == 9, we return [0, 1]." className="h-8 bg-zinc-900 border-zinc-700 text-xs" value={newQ.example1_explanation} onChange={e => setNewQ({ ...newQ, example1_explanation: e.target.value })} />
+                                        </div>
+                                        
+                                        <div className="space-y-2">
+                                            <p className="text-xs font-bold text-zinc-500">Example 2 (Optional)</p>
+                                            <Input placeholder="Input" className="h-8 bg-zinc-900 border-zinc-700 text-xs" value={newQ.example2_input} onChange={e => setNewQ({ ...newQ, example2_input: e.target.value })} />
+                                            <Input placeholder="Output" className="h-8 bg-zinc-900 border-zinc-700 text-xs" value={newQ.example2_output} onChange={e => setNewQ({ ...newQ, example2_output: e.target.value })} />
+                                            <Input placeholder="Explanation" className="h-8 bg-zinc-900 border-zinc-700 text-xs" value={newQ.example2_explanation} onChange={e => setNewQ({ ...newQ, example2_explanation: e.target.value })} />
+                                        </div>
+                                        
+                                        <div className="space-y-2">
+                                            <p className="text-xs font-bold text-zinc-500">Constraints</p>
+                                            <Input placeholder="2 <= nums.length <= 10^4" className="h-8 bg-zinc-900 border-zinc-700 text-xs" value={newQ.constraint1} onChange={e => setNewQ({ ...newQ, constraint1: e.target.value })} />
+                                            <Input placeholder="-10^9 <= nums[i] <= 10^9" className="h-8 bg-zinc-900 border-zinc-700 text-xs" value={newQ.constraint2} onChange={e => setNewQ({ ...newQ, constraint2: e.target.value })} />
+                                            <Input placeholder="-10^9 <= target <= 10^9" className="h-8 bg-zinc-900 border-zinc-700 text-xs" value={newQ.constraint3} onChange={e => setNewQ({ ...newQ, constraint3: e.target.value })} />
+                                        </div>
+                                    </div>
+                                )}
+                                
+                                <Button onClick={handleAddQuestion} className="w-full bg-white hover:bg-zinc-200 text-black font-bold">Save Question</Button>
                             </div>
                         </div>
-                        {/* Flowchart Manager */}
-                        <div className="space-y-6">
-                            <div className="bg-zinc-900 border border-yellow-900/30 p-6 rounded-2xl shadow-xl relative overflow-hidden">
-                                <h3 className="font-bold text-yellow-500 mb-4 flex items-center gap-2 text-lg"><Workflow className="w-5 h-5" /> Round 2: Flowchart Challenges</h3>
-                                <div className="space-y-3">
-                                    {flowchartProblems.map(fp => (
-                                        <div key={fp.id} className={cn("p-4 rounded-xl border transition-all relative", fp.is_active ? "bg-yellow-900/20 border-yellow-500" : "bg-zinc-950 border-zinc-800")}>
-                                            <div className="flex justify-between items-start">
-                                                <div><h4 className={cn("font-bold", fp.is_active ? "text-white" : "text-zinc-400")}>{fp.title}</h4></div>
-                                                <div>{fp.is_active ? <span className="flex items-center gap-1 text-[10px] font-bold bg-yellow-500 text-black px-2 py-1 rounded"><CheckCircle className="w-3 h-3" /> ACTIVE</span> : <Button size="sm" onClick={() => activateFlowchartProblem(fp.id)} variant="outline" className="h-7 text-xs border-zinc-700">Activate</Button>}</div>
+                        
+                        {/* Questions List Grid */}
+                        <div className="grid md:grid-cols-2 gap-6">
+                            {/* MCQ Questions */}
+                            <div className="bg-zinc-900 border border-zinc-800 p-5 rounded-xl">
+                                <h4 className="text-sm font-bold text-blue-400 mb-3 flex items-center gap-2">
+                                    <CheckCircle2 className="w-4 h-4" /> Round 1: MCQ Questions
+                                </h4>
+                                <div className="space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar">
+                                    {questions.filter(q => q.round_id === 'mcq').map(q => (
+                                        <div key={q.id} className="bg-zinc-900/50 border border-zinc-800 p-3 rounded-lg flex justify-between items-center">
+                                            <div>
+                                                <span className="text-sm font-bold text-zinc-300">{q.title}</span>
+                                                <p className="text-xs text-zinc-500 mt-0.5">{q.description.substring(0, 50)}...</p>
                                             </div>
+                                            <Button size="icon" variant="ghost" onClick={() => deleteQuestion(q.id, 'questions')}><Trash2 className="w-4 h-4 text-zinc-600 hover:text-red-500" /></Button>
                                         </div>
                                     ))}
+                                    {questions.filter(q => q.round_id === 'mcq').length === 0 && (
+                                        <div className="text-center py-8 text-zinc-500 text-sm">No MCQ questions yet</div>
+                                    )}
                                 </div>
+                            </div>
+                            
+                            {/* Coding Questions */}
+                            <div className="bg-zinc-900 border border-zinc-800 p-5 rounded-xl">
+                                <h4 className="text-sm font-bold text-purple-400 mb-3 flex items-center gap-2">
+                                    <Code className="w-4 h-4" /> Round 3: Coding Questions
+                                </h4>
+                                <div className="space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar">
+                                    {questions.filter(q => q.round_id === 'coding').map(q => (
+                                        <div key={q.id} className="bg-zinc-900/50 border border-zinc-800 p-3 rounded-lg flex justify-between items-center">
+                                            <div>
+                                                <span className="text-sm font-bold text-zinc-300">{q.title}</span>
+                                                <p className="text-xs text-zinc-500 mt-0.5">{q.description.substring(0, 50)}...</p>
+                                            </div>
+                                            <Button size="icon" variant="ghost" onClick={() => deleteQuestion(q.id, 'questions')}><Trash2 className="w-4 h-4 text-zinc-600 hover:text-red-500" /></Button>
+                                        </div>
+                                    ))}
+                                    {questions.filter(q => q.round_id === 'coding').length === 0 && (
+                                        <div className="text-center py-8 text-zinc-500 text-sm">No coding questions yet</div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {/* Flowchart Manager */}
+                        <div className="bg-zinc-900 border border-yellow-900/30 p-6 rounded-2xl shadow-xl">
+                            <h3 className="font-bold text-yellow-500 mb-4 flex items-center gap-2 text-lg"><Workflow className="w-5 h-5" /> Round 2: Flowchart Challenges</h3>
+                            
+                            {/* Add Flowchart Form */}
+                            <div className="mb-6 bg-zinc-950 border border-yellow-900/20 p-4 rounded-xl">
+                                <p className="text-xs font-bold text-yellow-400 mb-3">ADD NEW FLOWCHART PROBLEM</p>
+                                <div className="space-y-3">
+                                    <Input 
+                                        placeholder="Problem Title (e.g., Find Largest of 3 Numbers)" 
+                                        className="bg-zinc-900 border-zinc-700 text-sm" 
+                                        value={newFlowchart.title} 
+                                        onChange={e => setNewFlowchart({ ...newFlowchart, title: e.target.value })} 
+                                    />
+                                    <Textarea 
+                                        placeholder="Problem Description" 
+                                        className="bg-zinc-900 border-zinc-700 text-sm min-h-[60px]" 
+                                        value={newFlowchart.description} 
+                                        onChange={e => setNewFlowchart({ ...newFlowchart, description: e.target.value })} 
+                                    />
+                                    <div className="space-y-2">
+                                        <p className="text-xs text-zinc-500">Requirements (at least 1)</p>
+                                        <Input 
+                                            placeholder="Requirement 1" 
+                                            className="h-8 bg-zinc-900 border-zinc-700 text-xs" 
+                                            value={newFlowchart.req1} 
+                                            onChange={e => setNewFlowchart({ ...newFlowchart, req1: e.target.value })} 
+                                        />
+                                        <Input 
+                                            placeholder="Requirement 2 (optional)" 
+                                            className="h-8 bg-zinc-900 border-zinc-700 text-xs" 
+                                            value={newFlowchart.req2} 
+                                            onChange={e => setNewFlowchart({ ...newFlowchart, req2: e.target.value })} 
+                                        />
+                                        <Input 
+                                            placeholder="Requirement 3 (optional)" 
+                                            className="h-8 bg-zinc-900 border-zinc-700 text-xs" 
+                                            value={newFlowchart.req3} 
+                                            onChange={e => setNewFlowchart({ ...newFlowchart, req3: e.target.value })} 
+                                        />
+                                        <Input 
+                                            placeholder="Requirement 4 (optional)" 
+                                            className="h-8 bg-zinc-900 border-zinc-700 text-xs" 
+                                            value={newFlowchart.req4} 
+                                            onChange={e => setNewFlowchart({ ...newFlowchart, req4: e.target.value })} 
+                                        />
+                                    </div>
+                                    <Button 
+                                        onClick={handleAddFlowchart} 
+                                        className="w-full bg-yellow-600 hover:bg-yellow-500 text-black font-bold h-9"
+                                    >
+                                        Add Flowchart Problem
+                                    </Button>
+                                </div>
+                            </div>
+
+                            {/* Existing Flowchart Problems */}
+                            <div className="space-y-3">
+                                <p className="text-xs font-bold text-zinc-500 uppercase mb-2">Existing Problems</p>
+                                {flowchartProblems.map(fp => (
+                                    <div key={fp.id} className={cn("p-4 rounded-xl border transition-all relative", fp.is_active ? "bg-yellow-900/20 border-yellow-500" : "bg-zinc-950 border-zinc-800")}>
+                                        <div className="flex justify-between items-start gap-3">
+                                            <div className="flex-1">
+                                                <h4 className={cn("font-bold text-sm mb-1", fp.is_active ? "text-white" : "text-zinc-400")}>{fp.title}</h4>
+                                                <p className="text-xs text-zinc-500 mb-2">{fp.description}</p>
+                                                <div className="text-xs text-zinc-600">
+                                                    {fp.requirements.length} requirements
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-2 items-center">
+                                                {fp.is_active ? (
+                                                    <span className="flex items-center gap-1 text-[10px] font-bold bg-yellow-500 text-black px-2 py-1 rounded">
+                                                        <CheckCircle className="w-3 h-3" /> ACTIVE
+                                                    </span>
+                                                ) : (
+                                                    <Button 
+                                                        size="sm" 
+                                                        onClick={() => activateFlowchartProblem(fp.id)} 
+                                                        variant="outline" 
+                                                        className="h-7 text-xs border-zinc-700"
+                                                    >
+                                                        Activate
+                                                    </Button>
+                                                )}
+                                                <Button 
+                                                    size="icon" 
+                                                    variant="ghost" 
+                                                    onClick={() => deleteQuestion(fp.id, 'flowchart_problems')}
+                                                    className="h-7 w-7"
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5 text-zinc-600 hover:text-red-500" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                                {flowchartProblems.length === 0 && (
+                                    <div className="text-center py-8 text-zinc-500 text-sm">No flowchart problems yet</div>
+                                )}
                             </div>
                         </div>
                     </div>

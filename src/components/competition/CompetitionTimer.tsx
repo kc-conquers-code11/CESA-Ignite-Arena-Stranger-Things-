@@ -43,20 +43,20 @@ export const CompetitionTimer = ({
   const isCritical = timeRemaining < 60; // Less than 1 minute
 
   return (
-    <div className={cn("glass-strong rounded-xl p-6 space-y-4", className)}>
-      {/* Timer Display */}
-      <div className="text-center">
-        <div className="flex items-center justify-center gap-2 text-muted-foreground text-sm mb-2">
+    <div className={cn("space-y-2", className)}>
+      {/* Timer Display - Compact horizontal layout */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-zinc-400 text-xs">
           <Clock className="w-4 h-4" />
           <span>Time Remaining</span>
         </div>
 
         <motion.div
           className={cn(
-            "font-display text-5xl font-bold tracking-wider",
-            isCritical && "text-destructive animate-pulse",
-            isLow && !isCritical && "text-warning",
-            !isLow && "gradient-text"
+            "font-mono text-lg font-bold tracking-wider",
+            isCritical && "text-red-500 animate-pulse",
+            isLow && !isCritical && "text-yellow-500",
+            !isLow && "text-green-500"
           )}
           animate={isCritical ? { scale: [1, 1.05, 1] } : {}}
           transition={{ duration: 0.5, repeat: isCritical ? Infinity : 0 }}
@@ -65,12 +65,12 @@ export const CompetitionTimer = ({
         </motion.div>
       </div>
 
-      {/* Progress bar */}
-      <div className="h-2 bg-muted rounded-full overflow-hidden">
+      {/* Progress bar - More prominent */}
+      <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
         <motion.div
           className={cn(
             "h-full rounded-full transition-colors duration-300",
-            isCritical ? "bg-destructive" : isLow ? "bg-warning" : "bg-gradient-to-r from-primary to-secondary"
+            isCritical ? "bg-red-500" : isLow ? "bg-yellow-500" : "bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500"
           )}
           initial={{ width: '100%' }}
           animate={{ width: `${progress}%` }}
@@ -78,37 +78,34 @@ export const CompetitionTimer = ({
         />
       </div>
 
-      {/* Status indicators */}
-      <div className="space-y-3 pt-2">
+      {/* Status indicators - Compact inline display */}
+      <div className="flex items-center gap-4 text-xs">
         {/* Current Round */}
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">Current Round</span>
-          <span className="font-semibold text-primary capitalize">
-            {currentRound === 'mcq' ? 'Aptitude MCQ' :
-              currentRound === 'flowchart' ? 'Flowchart Design' :
-                currentRound === 'coding' ? 'DSA Coding' : currentRound}
+        <div className="flex items-center gap-2">
+          <span className="text-zinc-500">Round:</span>
+          <span className="font-semibold text-blue-400 capitalize">
+            {currentRound === 'mcq' ? 'MCQ' :
+              currentRound === 'flowchart' ? 'Flowchart' :
+                currentRound === 'coding' ? 'Coding' : currentRound}
           </span>
         </div>
 
         {/* Tab Switch Warning */}
         {tabSwitchCount > 0 && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex items-center justify-between text-sm bg-destructive/10 p-2 rounded-lg border border-destructive/30"
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="flex items-center gap-2 text-xs bg-red-950/30 px-2 py-1 rounded border border-red-900/50"
           >
-            <div className="flex items-center gap-2 text-destructive">
-              <AlertTriangle className="w-4 h-4" />
-              <span>Tab Switches</span>
-            </div>
-            <span className="font-bold text-destructive">{tabSwitchCount}/3</span>
+            <AlertTriangle className="w-3 h-3" />
+            <span>Switches: {tabSwitchCount}/3</span>
           </motion.div>
         )}
 
         {/* Security Status */}
-        <div className="flex items-center gap-2 text-success text-sm">
-          <Shield className="w-4 h-4" />
-          <span>Proctoring Active</span>
+        <div className="flex items-center gap-1.5 text-green-500">
+          <Shield className="w-3 h-3" />
+          <span>Proctored</span>
         </div>
       </div>
     </div>

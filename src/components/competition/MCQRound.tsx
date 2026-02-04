@@ -1,58 +1,30 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Flag, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Flag, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCompetitionStore } from '@/store/competitionStore';
 import { CompetitionTimer } from './CompetitionTimer';
+import { RoundTransition } from './RoundTransition';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { supabase } from '@/lib/supabaseClient';
 
 interface Question {
   id: string;
-  question: string;
+  title: string;
+  description: string;
   options: string[];
-  multiCorrect: boolean;
+  correct_answer: string;
 }
-
-// Sample questions (Hardcoded for now)
-const sampleQuestions: Question[] = [
-  {
-    id: 'q1',
-    question: 'What is the time complexity of binary search in a sorted array?',
-    options: ['O(n)', 'O(log n)', 'O(n²)', 'O(1)'],
-    multiCorrect: false,
-  },
-  {
-    id: 'q2',
-    question: 'Which data structure uses LIFO (Last In, First Out) principle?',
-    options: ['Queue', 'Stack', 'Linked List', 'Tree'],
-    multiCorrect: false,
-  },
-  {
-    id: 'q3',
-    question: 'Which of the following are valid sorting algorithms? (Select all that apply)',
-    options: ['Bubble Sort', 'Hash Sort', 'Merge Sort', 'Quick Sort'],
-    multiCorrect: true,
-  },
-  {
-    id: 'q4',
-    question: 'What is the worst-case time complexity of QuickSort?',
-    options: ['O(n log n)', 'O(n²)', 'O(n)', 'O(log n)'],
-    multiCorrect: false,
-  },
-  {
-    id: 'q5',
-    question: 'Which data structure is used for implementing recursion?',
-    options: ['Queue', 'Stack', 'Array', 'Linked List'],
-    multiCorrect: false,
-  },
-];
 
 export const MCQRound = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number[]>>({});
   const [flagged, setFlagged] = useState<Set<string>>(new Set());
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [loadingQuestions, setLoadingQuestions] = useState(true);
   
   //  NOW these functions exist in the store
   const { 
@@ -63,8 +35,34 @@ export const MCQRound = () => {
       disqualify // Alias for disqualifyUser
   } = useCompetitionStore();
 
-  const questions = sampleQuestions;
   const currentQuestion = questions[currentIndex];
+
+  // 0. Fetch questions from database
+  useEffect(() => {
+    const fetchQuestions = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('questions')
+          .select('*')
+          .eq('round_id', 'mcq')
+          .order('created_at', { ascending: true });
+
+        if (error) throw error;
+        if (data && data.length > 0) {
+          setQuestions(data);
+        } else {
+          toast.error('No MCQ questions found. Please contact admin.');
+        }
+      } catch (err) {
+        console.error('Failed to fetch questions:', err);
+        toast.error('Failed to load questions');
+      } finally {
+        setLoadingQuestions(false);
+      }
+    };
+
+    fetchQuestions();
+  }, []);
 
   // 1. Start timer on mount
   useEffect(() => {
@@ -138,15 +136,49 @@ export const MCQRound = () => {
     // TODO: Send answers to Supabase here if needed
     
     setTimeout(() => {
-      completeRound('mcq'); // This triggers navigation to Flowchart
-      toast.success('Round 1 completed! Moving to Flowchart Design...');
+      setSubmitted(true);
+      setIsSubmitting(false);
     }, 1000);
-  }, [completeRound]);
+  }, []);
 
   const handleTimeUp = useCallback(() => {
     toast.error("Time's up! Auto-submitting your answers...");
     handleSubmit();
   }, [handleSubmit]);
+
+  // Show transition screen after submission
+  if (submitted) {
+    return <RoundTransition 
+      completedRound="MCQ Round" 
+      nextRoundName="Flowchart Round"
+      nextRoundSlug="flowchart"
+    />;
+  }
+
+  // Loading State
+  if (loadingQuestions) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-zinc-400">Loading questions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // No Questions State
+  if (questions.length === 0) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center">
+          <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <h3 className="text-xl font-bold text-white mb-2">No Questions Available</h3>
+          <p className="text-zinc-400">Please contact the administrator.</p>
+        </div>
+      </div>
+    );
+  }
 
   const answeredCount = Object.keys(answers).length;
   const isCurrentAnswered = answers[currentQuestion.id]?.length > 0;
@@ -193,9 +225,14 @@ export const MCQRound = () => {
           </div>
 
           {/* Question Text */}
-          <h2 className="text-xl font-semibold mb-6 leading-relaxed select-none text-zinc-100">
-            {currentQuestion.question}
+          <h2 className="text-xl font-semibold mb-2 leading-relaxed select-none text-zinc-100">
+            {currentQuestion.title}
           </h2>
+          {currentQuestion.description && (
+            <p className="text-sm text-zinc-400 mb-6 leading-relaxed">
+              {currentQuestion.description}
+            </p>
+          )}
 
           {/* Options */}
           <div className="space-y-3">

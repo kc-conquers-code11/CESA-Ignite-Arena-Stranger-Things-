@@ -490,4 +490,56 @@
       0 0 10px var(--st-red),
       0 0 40px rgba(255, 31, 31, 0.6);
   }
+
+  /* Tldraw Canvas Optimizations */
+  .tldraw-custom-wrapper {
+    /* Performance optimizations */
+    will-change: transform;
+    contain: layout style paint;
+  }
+
+  /* Better scrollbar for requirements panel */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: hsl(0 5% 15%);
+    border-radius: 3px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: hsl(0 5% 30%);
+    border-radius: 3px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: hsl(0 5% 40%);
+  }
+}
+
+/* Tldraw UI Customization - Better spacing and visibility */
+.tldraw {
+  --color-background: #0a0a0a !important;
+  --color-panel: rgb(24 24 27) !important;
+}
+
+/* Tldraw toolbar positioning - prevent overlap */
+.tlui-layout__top {
+  padding-top: 8px !important;
+}
+
+.tlui-toolbar {
+  margin-left: 8px !important;
+}
+
+/* Better contrast for tldraw UI */
+.tlui-button {
+  border-radius: 6px !important;
+}
+
+/* Smoother rendering */
+.tl-canvas {
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
 }

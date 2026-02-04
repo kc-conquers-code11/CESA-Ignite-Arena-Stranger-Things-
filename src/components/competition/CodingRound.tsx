@@ -134,6 +134,11 @@ export const CodingRound = () => {
 
         {/* TOP: EDITOR AREA */}
         <div className="flex-1 flex flex-col bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden relative">
+          {/* Timer Bar - Prominent display at the top */}
+          <div className="bg-zinc-950 border-b border-zinc-800 px-4 py-2 shrink-0">
+            <CompetitionTimer totalSeconds={60 * 60} onTimeUp={handleTimeUp} />
+          </div>
+
           {/* Toolbar */}
           <div className="h-10 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between px-2 shrink-0">
             <div className="flex items-center gap-2">
@@ -146,13 +151,6 @@ export const CodingRound = () => {
                 </SelectContent>
               </Select>
             </div>
-
-            {/* Timer Badge */}
-            <div className="flex items-center gap-2 bg-red-950/30 border border-red-900/50 px-3 py-0.5 rounded text-xs font-mono text-red-400">
-              <Clock className="w-3 h-3" />
-              <CompetitionTimer totalSeconds={60 * 60} onTimeUp={handleTimeUp} className="text-xs" />
-            </div>
-
             <div className="w-[120px]" /> {/* Spacer for balance */}
           </div>
 

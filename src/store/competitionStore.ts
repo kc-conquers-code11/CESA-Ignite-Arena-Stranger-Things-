@@ -61,11 +61,33 @@ export const useCompetitionStore = create<CompetitionState>()(
         set({ userId, email });
         const { data } = await supabase.from('exam_sessions').select('*').eq('user_id', userId).single();
         if (data) {
+          // Build proper roundStatus based on current round
+          const currentRoundSlug = data.current_round_slug as Round;
+          const roundOrder: Round[] = ['rules', 'waiting', 'mcq', 'flowchart', 'coding', 'completed'];
+          const currentIndex = roundOrder.indexOf(currentRoundSlug);
+          
+          const newRoundStatus: Record<Round, RoundStatus> = {
+            rules: 'locked',
+            waiting: 'locked',
+            mcq: 'locked',
+            flowchart: 'locked',
+            coding: 'locked',
+            completed: 'locked',
+          };
+          
+          // Mark all rounds before current as completed
+          for (let i = 0; i < currentIndex; i++) {
+            newRoundStatus[roundOrder[i]] = 'completed';
+          }
+          
+          // Mark current round as active
+          newRoundStatus[currentRoundSlug] = 'active';
+          
           set({
             competitionStatus: data.status,
-            currentRound: data.current_round_slug as Round,
+            currentRound: currentRoundSlug,
             tabSwitchCount: data.tab_switches || 0,
-            roundStatus: { ...get().roundStatus, [data.current_round_slug]: 'active' }
+            roundStatus: newRoundStatus
           });
         } else {
           await supabase.from('exam_sessions').insert({ user_id: userId, email: email, status: 'active', current_round_slug: 'rules' });
@@ -74,12 +96,50 @@ export const useCompetitionStore = create<CompetitionState>()(
 
       syncSession: (data) => {
         console.log("⚡ Session Sync:", data);
-        set({ competitionStatus: data.status, currentRound: data.current_round_slug as Round, tabSwitchCount: data.tab_switches });
+        
+        // Build proper roundStatus based on current round
+        const currentRoundSlug = data.current_round_slug as Round;
+        const roundOrder: Round[] = ['rules', 'waiting', 'mcq', 'flowchart', 'coding', 'completed'];
+        const currentIndex = roundOrder.indexOf(currentRoundSlug);
+        
+        const newRoundStatus: Record<Round, RoundStatus> = {
+          rules: 'locked',
+          waiting: 'locked',
+          mcq: 'locked',
+          flowchart: 'locked',
+          coding: 'locked',
+          completed: 'locked',
+        };
+        
+        // Mark all rounds before current as completed
+        for (let i = 0; i < currentIndex; i++) {
+          newRoundStatus[roundOrder[i]] = 'completed';
+        }
+        
+        // Mark current round as active
+        newRoundStatus[currentRoundSlug] = 'active';
+        
+        set({ 
+          competitionStatus: data.status, 
+          currentRound: currentRoundSlug, 
+          tabSwitchCount: data.tab_switches,
+          roundStatus: newRoundStatus
+        });
       },
 
       acceptRules: async () => {
         const { userId } = get();
-        set({ currentRound: 'waiting', roundStatus: { ...get().roundStatus, rules: 'completed', waiting: 'active' } });
+        set({ 
+          currentRound: 'waiting', 
+          roundStatus: { 
+            rules: 'completed', 
+            waiting: 'active', 
+            mcq: 'locked',
+            flowchart: 'locked',
+            coding: 'locked',
+            completed: 'locked'
+          } 
+        });
         if (userId) await supabase.from('exam_sessions').update({ current_round_slug: 'waiting' }).eq('user_id', userId);
       },
 
@@ -92,18 +152,50 @@ export const useCompetitionStore = create<CompetitionState>()(
       },
 
       startRound1: () => {
-        set({ currentRound: 'mcq', roundStatus: { ...get().roundStatus, waiting: 'completed', mcq: 'active' } });
+        set({ 
+          currentRound: 'mcq', 
+          roundStatus: { 
+            rules: 'completed',
+            waiting: 'completed', 
+            mcq: 'active',
+            flowchart: 'locked',
+            coding: 'locked',
+            completed: 'locked'
+          } 
+        });
         get().startMCQ();
       },
 
       completeRound: async (completedRound) => {
         const { userId } = get();
         let nextRound: Round = 'completed';
-        if (completedRound === 'mcq') nextRound = 'flowchart';
-        else if (completedRound === 'flowchart') nextRound = 'coding';
-        else if (completedRound === 'coding') nextRound = 'completed';
+        const newRoundStatus: Record<Round, RoundStatus> = {
+          rules: 'completed',
+          waiting: 'completed',
+          mcq: 'locked',
+          flowchart: 'locked',
+          coding: 'locked',
+          completed: 'locked',
+        };
 
-        set({ currentRound: nextRound, roundStatus: { ...get().roundStatus, [completedRound]: 'completed', [nextRound]: 'active' } });
+        if (completedRound === 'mcq') {
+          nextRound = 'flowchart';
+          newRoundStatus.mcq = 'completed';
+          newRoundStatus.flowchart = 'active';
+        } else if (completedRound === 'flowchart') {
+          nextRound = 'coding';
+          newRoundStatus.mcq = 'completed';
+          newRoundStatus.flowchart = 'completed';
+          newRoundStatus.coding = 'active';
+        } else if (completedRound === 'coding') {
+          nextRound = 'completed';
+          newRoundStatus.mcq = 'completed';
+          newRoundStatus.flowchart = 'completed';
+          newRoundStatus.coding = 'completed';
+          newRoundStatus.completed = 'active';
+        }
+
+        set({ currentRound: nextRound, roundStatus: newRoundStatus });
         if (userId) await supabase.from('exam_sessions').update({ current_round_slug: nextRound }).eq('user_id', userId);
       },
 
