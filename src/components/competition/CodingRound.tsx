@@ -106,7 +106,7 @@ export const CodingRound = ({ isSidebarExpanded = false }: { isSidebarExpanded?:
     }
   });
 
-  const { completeRound, email } = useCompetitionStore();
+  const { completeRound, email, userId } = useCompetitionStore();
 
   const currentProblem = problems[activeProblemId];
   const activeSolution = solutions[activeProblemId];
@@ -172,10 +172,43 @@ export const CodingRound = ({ isSidebarExpanded = false }: { isSidebarExpanded?:
           language: sol.language,
           problemId: probId,
           teamName: email || 'Anonymous',
+          userId: userId,
           isSubmission,
         }),
       });
-      return await response.json();
+
+      const initData = await response.json();
+
+      // If validation error or immediate failure
+      if (!response.ok || initData.error || initData.status === 'Invalid') {
+        return initData;
+      }
+
+      const jobId = initData.job_id;
+      if (!jobId) return { status: 'Error', output: 'No Job ID returned', results: [] };
+
+      // POLLING LOOP
+      const MAX_RETRIES = 15; // 30 seconds (15 * 2s)
+      for (let i = 0; i < MAX_RETRIES; i++) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        try {
+          const statusRes = await fetch(`http://localhost:3001/api/status/${jobId}`);
+          if (!statusRes.ok) continue;
+
+          const statusData = await statusRes.json();
+
+          // If finished (completed/success or error)
+          if (statusData.status === 'completed' || statusData.status === 'success' || statusData.status === 'error') {
+            return statusData;
+          }
+        } catch (pollErr) {
+          console.error("Polling error:", pollErr);
+        }
+      }
+
+      return { status: 'Error', output: 'Execution Timed Out', results: [], score: 0 };
+
     } catch (e) {
       return { status: 'Error', output: 'Network Error', results: [], score: 0 };
     }

@@ -42,8 +42,10 @@ const limiter = rateLimit({
 
 app.use(cors());
 app.use(bodyParser.json());
+
 // Apply rate limiter to all api routes
 app.use('/api/', limiter);
+
 
 // Helper to save to Supabase Bucket (Async)
 async function saveToBucket(teamName: string, problemId: string, language: string, code: string) {
@@ -390,18 +392,29 @@ app.post('/api/execute', async (req: express.Request, res: express.Response) => 
     }
 
     try {
+        console.log(`[EXECUTE] Queueing job for user: ${userId || 'anonymous'}`);
+
         // 1. Create DB Record (Queued)
+        // Check if Supabase client is valid
+        if (!supabase) {
+            console.error("Supabase client not initialized");
+            return res.status(500).json({ error: "Server Configuration Error" });
+        }
+
+        const dbPayload = {
+            user_id: userId || 'anonymous',
+            language,
+            code,
+            status: 'queued',
+            stdout: '',
+            stderr: '',
+            score: 0
+        };
+
+        console.log("[EXECUTE] Inserting into executions table...");
         const { data: insertData, error: dbError } = await supabase
             .from('executions')
-            .insert({
-                user_id: userId || 'anonymous',
-                language,
-                code,
-                status: 'queued',
-                stdout: '',
-                stderr: '',
-                score: 0
-            })
+            .insert(dbPayload)
             .select()
             .single();
 
@@ -410,6 +423,7 @@ app.post('/api/execute', async (req: express.Request, res: express.Response) => 
             return res.status(500).json({ error: "Failed to queue execution." });
         }
 
+        console.log("[EXECUTE] Job Queued. ID:", insertData.id);
         const jobId = insertData.id;
         res.json({ job_id: jobId, status: 'queued' }); // Immediate response
 
@@ -437,13 +451,19 @@ app.post('/api/execute', async (req: express.Request, res: express.Response) => 
                 const { token, url: employedUrl } = await submitWithFallback(payload);
 
                 // Update DB with Token and set status to 'running'
-                await supabase
+                const { error: updateError } = await supabase
                     .from('executions')
                     .update({
                         status: 'running',
                         metadata: { judge0_token: token, judge0_url: employedUrl, problem_id: problemId, saved_file: savedFile }
                     })
                     .eq('id', jobId);
+
+                if (updateError) {
+                    console.error(`[EXECUTE] Failed to update job ${jobId} to running:`, updateError);
+                } else {
+                    console.log(`[EXECUTE] Job ${jobId} updated to 'running'. Token: ${token}`);
+                }
 
             } catch (bgError: any) {
                 console.error(`[BACKGROUND] Job ${jobId} Failed:`, bgError);
@@ -483,11 +503,70 @@ app.get('/api/leaderboard', async (req: express.Request, res: express.Response) 
     }
 });
 
+// Helper to Parse Output
+function parseJudge0Output(stdout: string, problemId: string) {
+    const problem = PROBLEMS[problemId] || PROBLEMS['two-sum'];
+    const judgeLines = stdout.split('\n').filter((l: string) => l.startsWith('__JUDGE__ '));
+
+    const results: any[] = [];
+    let passedCount = 0;
+
+    problem.testCases.forEach((tc, index) => {
+        const searchStr = `__JUDGE__ Test Case ${index + 1}: `;
+        const line = judgeLines.find((l: string) => l.includes(searchStr));
+
+        const resObj: any = {
+            status: 'Pending',
+            input: tc.hidden ? 'Hidden' : tc.input,
+            expected: tc.expected,
+            actual: 'N/A',
+            params: tc.hidden ? {} : tc.params,
+            error: null
+        };
+
+        if (line) {
+            const actual = line.replace(searchStr, '').trim();
+            resObj.actual = actual;
+
+            const normalize = (s: string) => s.replace(/\s+/g, '');
+            if (normalize(actual) === normalize(tc.expected)) {
+                resObj.status = 'Accepted';
+                passedCount++;
+            } else {
+                resObj.status = 'Wrong Answer';
+            }
+        } else {
+            // Not found (maybe runtime error prevented execution of this case)
+            resObj.status = 'Runtime Error';
+        }
+        results.push(resObj);
+    });
+
+    return { results, passedCount, total: problem.testCases.length };
+}
+
+
 // STATUS ENDPOINT
 app.get('/api/status/:id', async (req: express.Request, res: express.Response) => {
     const { id } = req.params;
     const { data, error } = await supabase.from('executions').select('*').eq('id', id).single();
     if (error || !data) return res.status(404).json({ error: 'Job not found' });
+
+    // If completed, we reconstruct the detailed results on the fly
+    // This avoids storing large JSON in DB if not needed, acts as a "View"
+    if (data.status === 'completed' || data.status === 'success') {
+        // Get Problem ID from metadata
+        const problemId = data.metadata?.problem_id || 'two-sum';
+        const { results } = parseJudge0Output(data.stdout || "", problemId);
+
+        // Attach to response
+        return res.json({
+            ...data,
+            results,
+            metrics: { time: 0 } // Mock or real if we had it
+        });
+    }
+
     res.json(data);
 });
 
@@ -501,6 +580,8 @@ setInterval(async () => {
         .not('metadata', 'is', null) // Ensure metadata exists
         .limit(10); // Batch size
 
+    // if (jobs && jobs.length > 0) console.log(`[POLL] Found ${jobs.length} running jobs.`);
+
     if (error || !jobs || jobs.length === 0) return;
 
     for (const job of jobs) {
@@ -508,7 +589,7 @@ setInterval(async () => {
             const { judge0_token, judge0_url, problem_id, saved_file } = job.metadata;
             if (!judge0_token) continue;
 
-            // console.log(`[POLL] Checking job ${job.id} at ${judge0_url}...`);
+            console.log(`[POLL] Checking job ${job.id} at ${judge0_url}...`);
 
             const response = await fetch(`${judge0_url}/submissions/${judge0_token}?base64_encoded=true`, {
                 signal: AbortSignal.timeout(5000)
@@ -578,18 +659,46 @@ setInterval(async () => {
                 })
                 .eq('id', job.id);
 
-            // Update Leaderboard (Round 3)
+            // Update Leaderboard (Round 3) - AGGREGATED SCORE
             if (job.user_id && job.user_id !== 'anonymous') {
+                // Fetch all successful executions for this user to calculate best score per problem
+                const { data: allExecs } = await supabase
+                    .from('executions')
+                    .select('score, metadata')
+                    .eq('user_id', job.user_id)
+                    .or('status.eq.completed,status.eq.success');
+
+                let bestTwoSum = 0;
+                let bestBinary = 0;
+
+                if (allExecs) {
+                    allExecs.forEach((ex: any) => {
+                        const pid = ex.metadata?.problem_id;
+                        const s = parseFloat(ex.score || '0');
+                        if (pid === 'two-sum') bestTwoSum = Math.max(bestTwoSum, s);
+                        if (pid === 'binary-search') bestBinary = Math.max(bestBinary, s);
+                    });
+                }
+
+                // If this current job wasn't in DB fetch yet (race condition), consider it too
+                // (though we just updated it above, so it SHOULD be in there if we awaited)
+                // But just in case:
+                if (problem_id === 'two-sum') bestTwoSum = Math.max(bestTwoSum, score);
+                if (problem_id === 'binary-search') bestBinary = Math.max(bestBinary, score);
+
+                const round3Score = (bestTwoSum + bestBinary) / 2;
+
                 const { data: existing } = await supabase.from('leaderboard').select('*').eq('user_id', job.user_id).single();
                 const r1 = existing?.round1_score || 0;
                 const r2 = existing?.round2_score || 0;
-                // If this is round 3. Currently /api/execute is used for Round 3 (Coding). 
-                // If used for other rounds, pass round info. Assuming Round 3 for now as per Context.
-                const newOverall = r1 + r2 + score;
+
+                const newOverall = r1 + r2 + round3Score;
+
+                console.log(`[LEADERBOARD] Updating User ${job.user_id} | TwoSum: ${bestTwoSum}, Binary: ${bestBinary} -> R3: ${round3Score} | Overall: ${newOverall}`);
 
                 await supabase.from('leaderboard').upsert({
                     user_id: job.user_id,
-                    round3_score: score,
+                    round3_score: round3Score,
                     overall_score: newOverall,
                     updated_at: new Date().toISOString()
                 }, { onConflict: 'user_id' });
