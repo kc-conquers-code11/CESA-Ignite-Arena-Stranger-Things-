@@ -1,306 +1,280 @@
-import React, { useCallback, useMemo, useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import {
-  ReactFlow,
-  Controls,
-  Background,
-  BackgroundVariant,
-  useNodesState,
-  useEdgesState,
-  addEdge,
-  Connection,
-  Edge,
-  Node,
-  Handle,
-  Position,
-  NodeTypes,
-  MarkerType,
-} from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
-import { Send, RotateCcw, RotateCw, ZoomIn, ZoomOut, Download, CheckCircle2 } from 'lucide-react';
+import React, { useCallback, useState, useEffect } from 'react';
+import { Tldraw, Editor, useEditor } from 'tldraw';
+import 'tldraw/tldraw.css';
+import { Send, RotateCcw, CheckCircle2, Loader2, BrainCircuit, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CompetitionTimer } from './CompetitionTimer';
+import { RoundTransition } from './RoundTransition';
 import { useCompetitionStore } from '@/store/competitionStore';
+import { supabase } from '@/lib/supabaseClient';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
-// --- Custom Node Components (Defined Outside) ---
+// --- TYPES ---
+interface FlowchartProblem {
+  id: string;
+  title: string;
+  description: string;
+  requirements: string[];
+}
 
-const StartEndNode = ({ data, type }: { data: { label: string }; type: string }) => (
-  <div className={cn(
-    "px-6 py-3 rounded-full border-2 font-bold text-sm min-w-[100px] text-center",
-    type === 'start' ? "bg-success/20 border-success text-success" : "bg-destructive/20 border-destructive text-destructive"
-  )}>
-    <Handle type="source" position={Position.Bottom} className="!bg-foreground" />
-    <Handle type="target" position={Position.Top} className="!bg-foreground" />
-    {data.label}
-  </div>
-);
+// --- SUB-COMPONENT: EDITOR CONTROLLER ---
+const EditorController = ({ onMount }: { onMount: (editor: Editor) => void }) => {
+  const editor = useEditor();
+  useEffect(() => { if (editor) onMount(editor); }, [editor, onMount]);
+  return null;
+}
 
-// Wrapper components to avoid inline functions in nodeTypes
-const StartNode = (props: any) => <StartEndNode {...props} type="start" />;
-const EndNode = (props: any) => <StartEndNode {...props} type="end" />;
-
-const ProcessNode = ({ data }: { data: { label: string } }) => (
-  <div className="px-6 py-3 bg-primary/20 border-2 border-primary rounded-lg font-medium text-sm min-w-[120px] text-center">
-    <Handle type="target" position={Position.Top} className="!bg-primary" />
-    <Handle type="source" position={Position.Bottom} className="!bg-primary" />
-    {data.label}
-  </div>
-);
-
-const DecisionNode = ({ data }: { data: { label: string } }) => (
-  <div className="relative">
-    <div
-      className="w-32 h-20 bg-secondary/20 border-2 border-secondary flex items-center justify-center font-medium text-sm text-center"
-      style={{
-        clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)',
-        transform: 'scale(1.2)'
-      }}
-    >
-      {data.label}
-    </div>
-    <Handle type="target" position={Position.Top} className="!bg-secondary !top-0" />
-    <Handle type="source" position={Position.Bottom} id="bottom" className="!bg-secondary !bottom-0" />
-    <Handle type="source" position={Position.Right} id="right" className="!bg-secondary !right-0" />
-    <Handle type="source" position={Position.Left} id="left" className="!bg-secondary !left-0" />
-  </div>
-);
-
-const InputOutputNode = ({ data }: { data: { label: string } }) => (
-  <div
-    className="px-6 py-3 bg-accent/20 border-2 border-accent font-medium text-sm min-w-[120px] text-center"
-    style={{
-      clipPath: 'polygon(10% 0%, 100% 0%, 90% 100%, 0% 100%)',
-    }}
-  >
-    <Handle type="target" position={Position.Top} className="!bg-accent" />
-    <Handle type="source" position={Position.Bottom} className="!bg-accent" />
-    {data.label}
-  </div>
-);
-
-// --- Configuration Data ---
-
-const initialNodes: Node[] = [
-  { id: '1', type: 'start', position: { x: 250, y: 0 }, data: { label: 'START' } },
-];
-
-const problemStatement = {
-  title: 'Binary Search Implementation',
-  description: 'Design a flowchart that implements the binary search algorithm to find a target element in a sorted array. The flowchart should include proper decision points for comparing the target with the middle element and adjusting the search range accordingly.',
-  requirements: [
-    'Start with initializing low and high pointers',
-    'Include a loop condition check',
-    'Calculate the middle index',
-    'Compare target with middle element',
-    'Handle found element case',
-    'Handle element not found case',
-  ],
-};
-
-const nodeTemplates = [
-  { type: 'start', label: 'START', color: 'success' },
-  { type: 'end', label: 'END', color: 'destructive' },
-  { type: 'process', label: 'Process', color: 'primary' },
-  { type: 'decision', label: 'Decision', color: 'secondary' },
-  { type: 'inputOutput', label: 'I/O', color: 'accent' },
-];
-
-// --- Main Component ---
-
+// --- MAIN COMPONENT ---
 export const FlowchartRound = () => {
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  const [selectedNodeType, setSelectedNodeType] = useState<string | null>(null);
+  const [editor, setEditor] = useState<Editor | null>(null);
+  const [activeProblem, setActiveProblem] = useState<FlowchartProblem | null>(null);
+  const [loadingProblem, setLoadingProblem] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [aiFeedback, setAiFeedback] = useState<{ score: number } | null>(null);
 
-  const { completeRound, saveFlowchart, startFlowchart, flowchartStartTime } = useCompetitionStore();
+  const { completeRound, userId, startFlowchart, flowchartStartTime } = useCompetitionStore();
 
-  // Memoize nodeTypes so React Flow doesn't re-create them on every render
-  const nodeTypes = useMemo<NodeTypes>(() => ({
-    start: StartNode,
-    end: EndNode,
-    process: ProcessNode,
-    decision: DecisionNode,
-    inputOutput: InputOutputNode,
-  }), []);
-
+  // 1. Fetch Active Problem
   useEffect(() => {
-    if (!flowchartStartTime) {
-      startFlowchart();
-    }
-  }, [flowchartStartTime, startFlowchart]);
+    const fetchProblem = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('flowchart_problems')
+          .select('*')
+          .eq('is_active', true)
+          .limit(1)
+          .maybeSingle();
 
-  const onConnect = useCallback(
-    (params: Connection) => {
-      setEdges((eds) =>
-        addEdge({
-          ...params,
-          type: 'smoothstep',
-          animated: true,
-          style: { stroke: 'hsl(var(--primary))' },
-          markerEnd: { type: MarkerType.ArrowClosed, color: 'hsl(var(--primary))' },
-        }, eds)
-      );
-    },
-    [setEdges]
-  );
-
-  const handleAddNode = useCallback((type: string) => {
-    const newNode: Node = {
-      id: `node-${Date.now()}`,
-      type,
-      position: { x: 250, y: nodes.length * 100 + 50 },
-      data: { label: type === 'start' ? 'START' : type === 'end' ? 'END' : `${type.charAt(0).toUpperCase() + type.slice(1)}` },
+        if (error) {
+          console.error("Fetch error:", error);
+          setActiveProblem(null);
+        } else if (data) {
+          setActiveProblem(data);
+        } else {
+          setActiveProblem(null);
+        }
+      } catch (err) {
+        console.error("Fetch failed:", err);
+        setActiveProblem(null);
+      } finally {
+        setLoadingProblem(false);
+      }
     };
-    setNodes((nds) => [...nds, newNode]);
-    setSelectedNodeType(null);
-  }, [nodes.length, setNodes]);
 
+    fetchProblem();
+    if (!flowchartStartTime) startFlowchart();
+  }, [startFlowchart, flowchartStartTime]);
+
+  // 2. Handle Editor Mount
+  const handleMount = useCallback((editorInstance: Editor) => {
+    setEditor(editorInstance);
+    // Set dark mode via user preferences
+    editorInstance.user.updateUserPreferences({ colorScheme: 'dark' });
+  }, []);
+
+  // 3. Reset Canvas
   const handleReset = useCallback(() => {
-    setNodes(initialNodes);
-    setEdges([]);
-    toast.info('Canvas reset');
-  }, [setNodes, setEdges]);
+    if (editor) {
+      editor.selectAll();
+      editor.deleteShapes(editor.getSelectedShapeIds());
+      toast.info("Canvas Cleared");
+    }
+  }, [editor]);
 
-  const handleSubmit = useCallback(() => {
-    saveFlowchart({ nodes, edges, submittedAt: new Date() });
-    completeRound('flowchart');
-    toast.success('Flowchart submitted! Moving to Coding Arena...');
-  }, [nodes, edges, saveFlowchart, completeRound]);
+  // 4. FAIL-SAFE SUBMIT LOGIC
+  const handleSubmit = useCallback(async () => {
+    if (!userId || !activeProblem || !editor) {
+      toast.error("System Error: Editor not ready.");
+      return;
+    }
 
-  const handleTimeUp = useCallback(() => {
-    toast.error("Time's up! Auto-submitting your flowchart...");
-    handleSubmit();
-  }, [handleSubmit]);
+    setIsSubmitting(true);
+    const toastId = toast.loading("Saving & Analyzing...");
+
+    try {
+      // 1. Get Tldraw Data
+      const records = editor.store.allRecords();
+
+      // Filter for shapes (nodes) and bindings (edges)
+      const nodesData = records.filter(r => r.typeName === 'shape');
+      const edgesData = records.filter(r => r.typeName === 'binding' || (r.typeName === 'shape' && r.type === 'arrow'));
+
+      // 2. Save to DB (Primary Step)
+      const { data: submission, error: dbError } = await supabase
+        .from('flowchart_submissions')
+        .insert({
+          user_id: userId,
+          problem_id: activeProblem.id,
+          nodes: nodesData,
+          edges: edgesData,
+          status: 'pending'
+        })
+        .select()
+        .single();
+
+      if (dbError) throw new Error(`DB Save Failed: ${dbError.message}`);
+
+      // 3. Try Calling AI (Secondary Step)
+      try {
+        const { data: responseData, error: invokeError } = await supabase.functions.invoke('evaluate-flowchart', {
+          body: { submission_id: submission.id }
+        });
+
+        if (invokeError) throw invokeError;
+
+        if (responseData?.success) {
+          // AI Success
+          setAiFeedback(responseData.data);
+          toast.success(`Score: ${responseData.data.score}/100`, { id: toastId });
+        } else {
+          throw new Error("AI Logic Error");
+        }
+
+      } catch (aiError) {
+        // ⚠️ FAIL-SAFE: If AI fails, DO NOT BLOCK USER
+        console.warn("AI Evaluation Failed (Skipping):", aiError);
+        toast.warning("AI busy. Submitted for Manual Review.", { id: toastId });
+
+        // Mark for manual review in DB silently
+        await supabase.from('flowchart_submissions')
+          .update({ status: 'manual_review' })
+          .eq('id', submission.id);
+      }
+
+      // 4. Submission Complete - Wait for Admin
+      setTimeout(() => {
+        setSubmitted(true);
+        setIsSubmitting(false);
+      }, 1500);
+
+    } catch (err: any) {
+      console.error("Critical Submission Error:", err);
+      // Only stop if the Database Save itself failed
+      toast.error(`Submission Error: ${err.message}`, { id: toastId });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [editor, userId, activeProblem, completeRound]);
+
+  // Show transition screen after submission
+  if (submitted) {
+    return <RoundTransition 
+      completedRound="Flowchart Round" 
+      nextRoundName="Coding Round"
+      nextRoundSlug="coding"
+    />;
+  }
+
+  // Loading States
+  if (loadingProblem) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-4 text-zinc-500">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+        <p className="text-xs font-mono">Initializing Whiteboard...</p>
+      </div>
+    );
+  }
+
+  if (!activeProblem) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-4 text-zinc-500">
+        <AlertCircle className="w-10 h-10 text-red-500" />
+        <h2 className="text-lg font-bold text-white">No Active Flowchart Problem</h2>
+        <p className="text-sm text-center max-w-md">
+          The admin hasn't activated a flowchart problem yet. Please wait for the problem to be activated from the admin panel.
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <div className="grid lg:grid-cols-[1fr,300px] gap-6 h-full">
-      {/* Main Canvas */}
-      <div className="space-y-4">
-        {/* Problem Statement */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="glass rounded-xl p-4"
-        >
-          <h2 className="font-display font-bold text-lg gradient-text mb-2">
-            {problemStatement.title}
-          </h2>
-          <p className="text-sm text-muted-foreground mb-3">
-            {problemStatement.description}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {problemStatement.requirements.map((req, i) => (
-              <span key={i} className="text-xs px-2 py-1 rounded bg-primary/10 text-primary">
-                {req}
-              </span>
-            ))}
-          </div>
-        </motion.div>
+    <div className="flex gap-4 h-[calc(100vh-6rem)] w-full animate-in fade-in duration-500 overflow-hidden">
 
-        {/* Node Palette */}
-        <div className="glass rounded-xl p-4">
-          <h3 className="text-sm font-semibold mb-3">Drag to add nodes:</h3>
-          <div className="flex gap-2 flex-wrap">
-            {nodeTemplates.map((template) => (
-              <Button
-                key={template.type}
-                variant="outline"
-                size="sm"
-                onClick={() => handleAddNode(template.type)}
-                className={cn(
-                  "gap-2",
-                  template.color === 'success' && "border-success text-success hover:bg-success/10",
-                  template.color === 'destructive' && "border-destructive text-destructive hover:bg-destructive/10",
-                  template.color === 'primary' && "border-primary text-primary hover:bg-primary/10",
-                  template.color === 'secondary' && "border-secondary text-secondary hover:bg-secondary/10",
-                  template.color === 'accent' && "border-accent text-accent hover:bg-accent/10",
-                )}
-              >
-                + {template.label}
-              </Button>
-            ))}
+      {/* LEFT: Canvas Area */}
+      <div className="flex-1 flex flex-col gap-3 min-w-0">
+
+        {/* Problem Header - Fixed at top, not overlapping */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 shrink-0">
+          <div className="flex justify-between items-start gap-4">
+            <div className="flex-1">
+              <h2 className="font-bold text-white text-base mb-1.5">{activeProblem.title}</h2>
+              <p className="text-xs text-zinc-400 leading-relaxed">{activeProblem.description}</p>
+            </div>
+            {aiFeedback && (
+              <div className="text-right shrink-0">
+                <p className="text-[10px] uppercase text-zinc-500 font-bold">Score</p>
+                <p className="text-2xl font-mono font-bold text-blue-400">{aiFeedback.score}</p>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Canvas */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="glass-strong rounded-xl overflow-hidden"
-          style={{ height: '500px' }}
-        >
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            nodeTypes={nodeTypes}
-            fitView
-            className="bg-background"
-          >
-            <Controls className="!bg-card !border-border !rounded-lg overflow-hidden" />
-            <Background
-              variant={BackgroundVariant.Dots}
-              gap={20}
-              size={1}
-              color="hsl(var(--muted-foreground) / 0.2)"
-            />
-          </ReactFlow>
-        </motion.div>
+        {/* Main Canvas (TLDRAW) - More space, better performance */}
+        <div className="flex-1 border border-zinc-800 rounded-lg overflow-hidden bg-[#0a0a0a] relative">
+          {isSubmitting && (
+            <div className="absolute inset-0 z-[1000] bg-black/80 flex flex-col items-center justify-center backdrop-blur-sm">
+              <BrainCircuit className="w-16 h-16 text-blue-500 animate-pulse mb-3" />
+              <h3 className="text-xl font-bold text-white">AI Analysis in Progress...</h3>
+              <p className="text-zinc-400 text-sm font-mono mt-2">Reading logic structure...</p>
+            </div>
+          )}
 
-        {/* Actions */}
-        <div className="flex items-center justify-between">
-          <Button variant="outline" onClick={handleReset} className="gap-2">
-            <RotateCcw className="w-4 h-4" />
-            Reset Canvas
+          <div className="absolute inset-0 tldraw-custom-wrapper">
+            <Tldraw
+              persistenceKey={`flowchart-${userId}`}
+              hideUi={false}
+              onMount={handleMount}
+              inferDarkMode
+            >
+              <EditorController onMount={handleMount} />
+            </Tldraw>
+          </div>
+        </div>
+
+        {/* Bottom Actions - Compact */}
+        <div className="flex justify-between items-center bg-zinc-900 p-3 rounded-lg border border-zinc-800 shrink-0">
+          <Button variant="ghost" size="sm" onClick={handleReset} className="text-zinc-400 hover:text-white hover:bg-red-900/20 h-8">
+            <RotateCcw className="w-3.5 h-3.5 mr-2" /> Clear Canvas
           </Button>
-
-          <Button
-            onClick={handleSubmit}
-            className="bg-gradient-to-r from-primary to-secondary gap-2"
-          >
-            <Send className="w-4 h-4" />
-            Submit Flowchart
+          <Button onClick={handleSubmit} disabled={isSubmitting} size="sm" className="bg-blue-600 hover:bg-blue-500 text-white font-semibold px-6 h-8">
+            {isSubmitting ? 'Evaluating...' : 'Submit Logic'} <Send className="w-3.5 h-3.5 ml-2" />
           </Button>
         </div>
       </div>
 
-      {/* Sidebar */}
-      <div className="space-y-4">
-        <CompetitionTimer
-          totalSeconds={45 * 60}
-          onTimeUp={handleTimeUp}
-        />
-
-        {/* Stats */}
-        <div className="glass rounded-xl p-4 space-y-3">
-          <h3 className="text-sm font-semibold">Canvas Statistics</h3>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Nodes</span>
-              <span className="font-bold text-primary">{nodes.length}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Connections</span>
-              <span className="font-bold text-secondary">{edges.length}</span>
-            </div>
-          </div>
+      {/* RIGHT: Timer & Requirements - Better width */}
+      <div className="w-[320px] flex flex-col gap-3 shrink-0">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3">
+          <CompetitionTimer totalSeconds={45 * 60} onTimeUp={handleSubmit} />
         </div>
 
-        {/* Tips */}
-        <div className="glass rounded-xl p-4">
-          <h3 className="text-sm font-semibold mb-2">Tips</h3>
-          <ul className="text-xs text-muted-foreground space-y-1">
-            <li>• Click and drag between handles to connect</li>
-            <li>• Double-click nodes to edit labels</li>
-            <li>• Use scroll to zoom</li>
-            <li>• Decision nodes have multiple outputs</li>
+        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 flex-1 overflow-y-auto custom-scrollbar">
+          <h3 className="text-xs font-bold text-blue-400 uppercase mb-3 flex items-center gap-2">
+            <CheckCircle2 className="w-3.5 h-3.5" /> Requirements
+          </h3>
+          <ul className="space-y-2.5">
+            {activeProblem.requirements.map((req, i) => (
+              <li key={i} className="text-xs text-zinc-300 flex items-start gap-2.5 bg-zinc-800/40 p-2.5 rounded border border-zinc-800/50">
+                <span className="text-blue-400 font-mono text-[10px] mt-0.5 font-bold">0{i + 1}</span>
+                <span className="leading-relaxed">{req}</span>
+              </li>
+            ))}
           </ul>
+
+          <div className="mt-5 pt-4 border-t border-zinc-800">
+            <h3 className="text-xs font-bold text-zinc-500 uppercase mb-2.5">Canvas Guide</h3>
+            <ul className="text-xs text-zinc-400 space-y-1.5 list-disc pl-4">
+              <li>Use <span className="text-white font-semibold">Shapes</span> from toolbar</li>
+              <li>Connect with <span className="text-white font-semibold">Arrows</span></li>
+              <li>Double click to add text</li>
+              <li>Right click to delete/duplicate</li>
+            </ul>
+          </div>
         </div>
       </div>
+
     </div>
   );
 };
