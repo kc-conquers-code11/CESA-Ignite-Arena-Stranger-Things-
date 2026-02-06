@@ -5,7 +5,7 @@ import {
     Shield, RefreshCw, Play, Ban, Search,
     Plus, Trash2, AlertTriangle, LogOut,
     Activity, Workflow, CheckCircle, CheckCircle2, Eye, X, FileJson, Cpu, Code, Trophy,
-    ChevronsRight, Clock, FastForward
+    ListChecks, Clock, FastForward
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -67,7 +67,6 @@ interface LeaderboardEntry {
     round2_score: number;
     round3_score: number;
     overall_score: number;
-    // Time metrics (Optional - will show 'N/A' if missing in DB)
     total_time_seconds?: number;
     round1_time?: string;
     round2_time?: string;
@@ -75,7 +74,7 @@ interface LeaderboardEntry {
     updated_at: string;
 }
 
-// --- SUB-COMPONENT: INSPECTION MODAL ---
+// --- INSPECTION MODAL ---
 function InspectionModal({ user, loading, data, onClose }: { user: Participant; loading: boolean; data: InspectionData | null; onClose: () => void }) {
     return (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in zoom-in-95 duration-200">
@@ -158,7 +157,7 @@ export default function AdminPanel() {
     const codingCount = participants.filter(p => p.current_round_slug === 'coding').length;
 
     // ---------------------------------------------------------
-    // 1. DATA FETCHING (Enhanced with Time-Based Sorting)
+    // 1. DATA FETCHING
     // ---------------------------------------------------------
     const fetchData = async () => {
         if (participants.length === 0) setLoading(true);
@@ -179,18 +178,11 @@ export default function AdminPanel() {
             const { data: lData } = await supabase.from('leaderboard').select('*');
 
             if (lData && users) {
-                // Merge Data
                 const enhancedData = lData.map(entry => {
                     const user = users.find(u => u.user_id === entry.user_id);
-                    return {
-                        ...entry,
-                        user_email: user?.email || 'Unknown User'
-                    };
+                    return { ...entry, user_email: user?.email || 'Unknown User' };
                 });
 
-                // PRO RANKING ALGORITHM
-                // 1. Sort by Overall Score (Descending)
-                // 2. Tie-breaker: Total Time (Ascending) - Less time is better
                 enhancedData.sort((a, b) => {
                     if (b.overall_score !== a.overall_score) {
                         return b.overall_score - a.overall_score;
@@ -222,7 +214,7 @@ export default function AdminPanel() {
     }, []);
 
     // ---------------------------------------------------------
-    // 2. HELPERS & ACTIONS
+    // 2. ACTIONS
     // ---------------------------------------------------------
     const formatTime = (isoString: string | null | undefined) => {
         if (!isoString) return <span className="text-zinc-600">--:--:--</span>;
@@ -244,34 +236,25 @@ export default function AdminPanel() {
 
     const handleUserAction = async (action: 'freeze' | 'unfreeze' | 'dq', userId: string) => {
         const targetStatus = action === 'freeze' ? 'frozen' : action === 'unfreeze' ? 'active' : 'disqualified';
-        
-        // Optimistic UI
         setParticipants(prev => prev.map(p => p.user_id === userId ? { ...p, status: targetStatus } : p));
-        
         const { error } = await supabase.from('exam_sessions').update({ status: targetStatus }).eq('user_id', userId);
-        if (error) {
-            toast.error("Action failed, reverting...");
-            fetchData();
-        } else {
-            toast.success(`User status updated to: ${targetStatus}`);
-        }
+        if (error) { toast.error("Action failed"); fetchData(); } 
+        else { toast.success(`User status updated to: ${targetStatus}`); }
     };
 
-    // ✅ NEW: DIRECT JUMP TO FINAL ROUND
-    const jumpToFinalRound = async (userId: string) => {
-        if(!confirm("⚠️ WARNING: Promote user directly to Coding Round? This skips previous logic.")) return;
+    // ✅ NEW: MOVE USER TO SPECIFIC ROUND (Unrestricted)
+    const moveUserToRound = async (userId: string, round: 'mcq' | 'flowchart' | 'coding') => {
+        if(!confirm(`⚠️ Move this user to ${round.toUpperCase()} Round?`)) return;
         
-        // Optimistic Update
-        setParticipants(prev => prev.map(p => p.user_id === userId ? { ...p, current_round_slug: 'coding' } : p));
+        // Optimistic
+        setParticipants(prev => prev.map(p => p.user_id === userId ? { ...p, current_round_slug: round } : p));
         
-        const { error } = await supabase.from('exam_sessions').update({ current_round_slug: 'coding' }).eq('user_id', userId);
+        const { error } = await supabase.from('exam_sessions')
+            .update({ current_round_slug: round })
+            .eq('user_id', userId);
         
-        if(error) {
-            toast.error("Jump failed");
-            fetchData();
-        } else {
-            toast.success("User promoted to Coding Round");
-        }
+        if(error) { toast.error("Move failed"); fetchData(); }
+        else { toast.success(`Moved to ${round.toUpperCase()}`); }
     };
 
     const activateFlowchartProblem = async (id: string) => {
@@ -293,7 +276,7 @@ export default function AdminPanel() {
 
     const closeInspection = () => { setSelectedUser(null); setInspectionData(null); };
 
-    // --- ROUND CONTROLS ---
+    // --- ROUND CONTROLS (BULK) ---
     const startExam = async () => {
         if (!confirm("⚠️ START EXAM?")) return;
         const toastId = toast.loading("Starting Round 1...");
@@ -433,16 +416,40 @@ export default function AdminPanel() {
                                                 <div className="flex items-center gap-2 text-zinc-400 mt-1"><Activity className="w-3 h-3 text-blue-500" /> Last: {formatTime(p.updated_at)}</div>
                                             </td>
                                             <td className="p-4 text-center"><span className={cn("font-mono text-lg font-bold", p.tab_switches > 0 ? "text-red-500" : "text-zinc-700")}>{p.tab_switches}</span></td>
-                                            <td className="p-4 pr-6 flex justify-end gap-2 opacity-80 group-hover:opacity-100 transition-opacity">
+                                            <td className="p-4 pr-6 flex justify-end items-center gap-2 opacity-80 group-hover:opacity-100 transition-opacity">
                                                 
-                                                {/* JUMP BUTTON */}
-                                                {p.current_round_slug !== 'coding' && (
-                                                    <Button size="sm" variant="ghost" onClick={() => jumpToFinalRound(p.user_id)} className="text-purple-400 hover:text-purple-300 hover:bg-purple-900/20" title="Promote to Coding Round">
-                                                        <ChevronsRight className="w-4 h-4" />
+                                                {/* ROUND JUMPERS (UNLOCKED) */}
+                                                <div className="flex bg-zinc-950 rounded-lg p-1 border border-zinc-800 mr-2">
+                                                    <Button 
+                                                        size="icon" 
+                                                        variant="ghost" 
+                                                        onClick={() => moveUserToRound(p.user_id, 'mcq')} 
+                                                        className={cn("h-7 w-7", p.current_round_slug === 'mcq' ? "bg-green-600 text-white shadow-lg" : "text-zinc-500 hover:text-green-400 hover:bg-green-900/20")}
+                                                        title="Move to MCQ"
+                                                    >
+                                                        <ListChecks className="w-4 h-4" />
                                                     </Button>
-                                                )}
+                                                    <Button 
+                                                        size="icon" 
+                                                        variant="ghost" 
+                                                        onClick={() => moveUserToRound(p.user_id, 'flowchart')} 
+                                                        className={cn("h-7 w-7", p.current_round_slug === 'flowchart' ? "bg-yellow-600 text-black shadow-lg" : "text-zinc-500 hover:text-yellow-400 hover:bg-yellow-900/20")}
+                                                        title="Move to Flowchart"
+                                                    >
+                                                        <Workflow className="w-4 h-4" />
+                                                    </Button>
+                                                    <Button 
+                                                        size="icon" 
+                                                        variant="ghost" 
+                                                        onClick={() => moveUserToRound(p.user_id, 'coding')} 
+                                                        className={cn("h-7 w-7", p.current_round_slug === 'coding' ? "bg-purple-600 text-white shadow-lg" : "text-zinc-500 hover:text-purple-400 hover:bg-purple-900/20")}
+                                                        title="Move to Coding"
+                                                    >
+                                                        <Code className="w-4 h-4" />
+                                                    </Button>
+                                                </div>
 
-                                                <Button size="sm" variant="ghost" onClick={() => inspectUser(p)} className="h-8 w-8 p-0 text-blue-400 hover:text-blue-300 hover:bg-blue-900/20"><Eye className="w-4 h-4" /></Button>
+                                                <Button size="sm" variant="ghost" onClick={() => inspectUser(p)} className="h-8 w-8 p-0 text-blue-400 hover:text-blue-300 hover:bg-blue-900/20" title="Inspect"><Eye className="w-4 h-4" /></Button>
 
                                                 {p.status === 'frozen' ? (
                                                     <Button size="sm" onClick={() => handleUserAction('unfreeze', p.user_id)} className="bg-green-700 hover:bg-green-600 text-white h-8 text-xs font-bold">Resume</Button>
@@ -450,7 +457,7 @@ export default function AdminPanel() {
                                                     <Button size="sm" variant="outline" onClick={() => handleUserAction('freeze', p.user_id)} className="border-orange-600/50 text-orange-500 hover:bg-orange-900/20 h-8 text-xs">Freeze</Button>
                                                 )}
 
-                                                <Button size="sm" variant="destructive" onClick={() => handleUserAction('dq', p.user_id)} className="h-8 w-8 p-0"><Ban className="w-3 h-3" /></Button>
+                                                <Button size="sm" variant="destructive" onClick={() => handleUserAction('dq', p.user_id)} className="h-8 w-8 p-0" title="Ban"><Ban className="w-3 h-3" /></Button>
                                             </td>
                                         </tr>
                                     ))}
