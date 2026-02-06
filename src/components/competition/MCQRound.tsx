@@ -35,7 +35,8 @@ export const MCQRound = () => {
     startMCQ,
     mcqStartTime,
     disqualify, // Alias for disqualifyUser
-    userId
+    userId,
+    email
   } = useCompetitionStore();
 
   const currentQuestion = questions[currentIndex];
@@ -155,22 +156,42 @@ export const MCQRound = () => {
     console.log("Submitting Score:", score);
 
     try {
-      if (userId) {
-        // Fetch existing to preserve other round scores if row exists (and calculate total)
-        const { data: existing } = await supabase.from('leaderboard').select('*').eq('user_id', userId).maybeSingle();
+      // Fetch authenticated user for RLS compliance
+      const { data: { user } } = await supabase.auth.getUser();
+      const authUserId = user?.id || userId;
 
+      if (authUserId) {
+        const timestamp = new Date().toISOString();
+
+        // 1. Upsert Profiles Table (Ensure it exists)
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .upsert({
+            id: authUserId,
+            email: email, // From store or auth user
+            score: score,
+            last_active: timestamp,
+            competition_status: 'active'
+          }, { onConflict: 'id' });
+
+        if (profileError) console.error("Profile update failed:", profileError);
+
+        // 2. Fetch Existing Leaderboard
+        const { data: existing } = await supabase.from('leaderboard').select('*').eq('user_id', authUserId).maybeSingle();
         const r2 = existing?.round2_score || 0;
         const r3 = existing?.round3_score || 0;
         const newOverall = score + r2 + r3;
 
-        const { error } = await supabase.from('leaderboard').upsert({
-          user_id: userId,
+        const { error: lbError } = await supabase.from('leaderboard').upsert({
+          user_id: authUserId,
           round1_score: score,
           overall_score: newOverall,
-          updated_at: new Date().toISOString()
+          updated_at: timestamp
         }, { onConflict: 'user_id' });
 
-        if (error) console.error("Leaderboard update failed:", error);
+        if (lbError) console.error("Leaderboard update failed:", lbError);
+
+
       }
     } catch (err) {
       console.error("Score submission error:", err);
