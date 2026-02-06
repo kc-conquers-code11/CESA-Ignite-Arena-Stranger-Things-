@@ -162,7 +162,7 @@ export const CodingRound = ({ isSidebarExpanded = false }: { isSidebarExpanded?:
   const executeResult = async (probId: ProblemId, isSubmission: boolean) => {
     const sol = solutions[probId];
     try {
-      const response = await fetch('http://localhost:3001/api/execute', {
+      const response = await fetch(process.env.JUDGE_API_URL + '/api/execute', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
