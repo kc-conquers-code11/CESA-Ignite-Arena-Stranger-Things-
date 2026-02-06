@@ -15,6 +15,8 @@ interface Question {
   description: string;
   options: string[];
   correct_answer: string;
+  points?: number;
+  multiCorrect?: boolean;
 }
 
 export const MCQRound = () => {
@@ -25,14 +27,16 @@ export const MCQRound = () => {
   const [submitted, setSubmitted] = useState(false);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(true);
-  
+
   //  NOW these functions exist in the store
-  const { 
-      completeRound, 
-      incrementTabSwitch, // Alias for logTabSwitch
-      startMCQ, 
-      mcqStartTime, 
-      disqualify // Alias for disqualifyUser
+  const {
+    completeRound,
+    incrementTabSwitch, // Alias for logTabSwitch
+    startMCQ,
+    mcqStartTime,
+    disqualify, // Alias for disqualifyUser
+    userId,
+    email
   } = useCompetitionStore();
 
   const currentQuestion = questions[currentIndex];
@@ -49,7 +53,20 @@ export const MCQRound = () => {
 
         if (error) throw error;
         if (data && data.length > 0) {
-          setQuestions(data);
+          // Parse options if they are strings (handle legacy/import data issues)
+          const parsedData = data.map((q: any) => {
+            let parsedOptions = q.options;
+            if (typeof q.options === 'string') {
+              try {
+                parsedOptions = JSON.parse(q.options);
+              } catch (e) {
+                console.error("Failed to parse options for question", q.id, e);
+                parsedOptions = [];
+              }
+            }
+            return { ...q, options: parsedOptions };
+          });
+          setQuestions(parsedData);
         } else {
           toast.error('No MCQ questions found. Please contact admin.');
         }
@@ -78,20 +95,20 @@ export const MCQRound = () => {
       if (document.hidden) {
         incrementTabSwitch();
         toast.warning('Tab switch detected! This has been logged.', {
-            icon: <AlertTriangle className="w-4 h-4 text-orange-500" />,
-            duration: 4000
+          icon: <AlertTriangle className="w-4 h-4 text-orange-500" />,
+          duration: 4000
         });
       }
     };
 
     const handleCopy = (e: ClipboardEvent) => {
-        e.preventDefault();
-        toast.error('Copying is disabled!');
+      e.preventDefault();
+      toast.error('Copying is disabled!');
     };
 
     const handlePaste = (e: ClipboardEvent) => {
-        e.preventDefault();
-        toast.error('Pasting is disabled!');
+      e.preventDefault();
+      toast.error('Pasting is disabled!');
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -131,15 +148,72 @@ export const MCQRound = () => {
     });
   };
 
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
     setIsSubmitting(true);
-    // TODO: Send answers to Supabase here if needed
-    
+
+    // Calculate Score
+    let score = 0;
+    questions.forEach(q => {
+      const userAnswers = answers[q.id] || [];
+      // Find index of correct answer
+      // Note: q.options is now parsed, so it's an array of strings.
+      const correctOptionIndex = q.options.findIndex(opt => opt === q.correct_answer);
+
+      // Exact match
+      if (correctOptionIndex !== -1 && userAnswers.includes(correctOptionIndex)) {
+        score += (q.points || 10);
+      }
+    });
+
+    console.log("Submitting Score:", score);
+
+    try {
+      // Fetch authenticated user for RLS compliance
+      const { data: { user } } = await supabase.auth.getUser();
+      const authUserId = user?.id || userId;
+
+      if (authUserId) {
+        const timestamp = new Date().toISOString();
+
+        // 1. Upsert Profiles Table (Ensure it exists)
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .upsert({
+            id: authUserId,
+            email: email, // From store or auth user
+            score: score,
+            last_active: timestamp,
+            competition_status: 'active'
+            // full_name might be missing if not gathered elsewhere
+          }, { onConflict: 'id' });
+
+        if (profileError) console.error("Profile update failed:", profileError);
+
+        // 2. Update Leaderboard Table
+        const { data: existing } = await supabase.from('leaderboard').select('*').eq('user_id', authUserId).maybeSingle();
+        const r2 = existing?.round2_score || 0;
+        const r3 = existing?.round3_score || 0;
+        const newOverall = score + r2 + r3;
+
+        const { error: lbError } = await supabase.from('leaderboard').upsert({
+          user_id: authUserId,
+          round1_score: score,
+          overall_score: newOverall,
+          updated_at: timestamp
+        }, { onConflict: 'user_id' });
+
+        if (lbError) console.error("Leaderboard update failed:", lbError);
+      }
+    } catch (err) {
+      console.error("Score submission error:", err);
+    }
+
     setTimeout(() => {
       setSubmitted(true);
       setIsSubmitting(false);
+      completeRound('mcq');
     }, 1000);
-  }, []);
+  }, [answers, questions, userId, completeRound]);
 
   const handleTimeUp = useCallback(() => {
     toast.error("Time's up! Auto-submitting your answers...");
@@ -148,8 +222,8 @@ export const MCQRound = () => {
 
   // Show transition screen after submission
   if (submitted) {
-    return <RoundTransition 
-      completedRound="MCQ Round" 
+    return <RoundTransition
+      completedRound="MCQ Round"
       nextRoundName="Flowchart Round"
       nextRoundSlug="flowchart"
     />;
@@ -188,7 +262,7 @@ export const MCQRound = () => {
     <div className="grid lg:grid-cols-[1fr,300px] gap-6 h-full animate-in fade-in slide-in-from-bottom-4">
       {/* Main Content */}
       <div className="space-y-6">
-        
+
         {/* Question Card */}
         <motion.div
           key={currentQuestion.id}
@@ -332,33 +406,33 @@ export const MCQRound = () => {
 
         {/* Question Navigator */}
         <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 backdrop-blur-md">
-           <h3 className="text-sm font-semibold mb-3 text-zinc-400">Navigator</h3>
-           <div className="flex flex-wrap gap-2">
-             {questions.map((q, index) => {
-               const isAnswered = answers[q.id]?.length > 0;
-               const isFlagged = flagged.has(q.id);
-               const isCurrent = index === currentIndex;
+          <h3 className="text-sm font-semibold mb-3 text-zinc-400">Navigator</h3>
+          <div className="flex flex-wrap gap-2">
+            {questions.map((q, index) => {
+              const isAnswered = answers[q.id]?.length > 0;
+              const isFlagged = flagged.has(q.id);
+              const isCurrent = index === currentIndex;
 
-               return (
-                 <button
-                   key={q.id}
-                   onClick={() => setCurrentIndex(index)}
-                   className={cn(
-                     "w-8 h-8 rounded-lg font-bold text-xs transition-all duration-200 relative",
-                     isCurrent && "ring-2 ring-red-500 bg-red-500/10 text-red-500",
-                     isAnswered && !isCurrent && "bg-green-900/30 text-green-400 border border-green-900/50",
-                     !isAnswered && !isCurrent && "bg-zinc-800 text-zinc-500 hover:bg-zinc-700",
-                     isCurrent && isAnswered && "bg-green-500 text-black ring-green-500"
-                   )}
-                 >
-                   {index + 1}
-                   {isFlagged && (
-                     <span className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-500 rounded-full shadow-lg" />
-                   )}
-                 </button>
-               );
-             })}
-           </div>
+              return (
+                <button
+                  key={q.id}
+                  onClick={() => setCurrentIndex(index)}
+                  className={cn(
+                    "w-8 h-8 rounded-lg font-bold text-xs transition-all duration-200 relative",
+                    isCurrent && "ring-2 ring-red-500 bg-red-500/10 text-red-500",
+                    isAnswered && !isCurrent && "bg-green-900/30 text-green-400 border border-green-900/50",
+                    !isAnswered && !isCurrent && "bg-zinc-800 text-zinc-500 hover:bg-zinc-700",
+                    isCurrent && isAnswered && "bg-green-500 text-black ring-green-500"
+                  )}
+                >
+                  {index + 1}
+                  {isFlagged && (
+                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-500 rounded-full shadow-lg" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
