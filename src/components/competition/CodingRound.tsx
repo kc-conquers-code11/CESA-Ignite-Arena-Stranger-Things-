@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import Editor from '@monaco-editor/react';
-import { Play, Send, RefreshCw, Terminal, CheckCircle2, XCircle, Clock, Code2, AlertCircle, Cpu, FileJson, Lock, Unlock } from 'lucide-react';
+import { Play, Send, RefreshCw, Terminal, CheckCircle2, XCircle, Clock, Code2, AlertCircle, Cpu, FileJson, Lock, Unlock, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CompetitionTimer } from './CompetitionTimer';
@@ -8,6 +8,7 @@ import { useCompetitionStore } from '@/store/competitionStore';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { supabase } from '@/lib/supabaseClient'; // 👈 IMPORT ADDED
 import {
   AlertDialog,
   AlertDialogAction,
@@ -79,6 +80,8 @@ export const CodingRound = ({ isSidebarExpanded = false }: { isSidebarExpanded?:
   const [activeProblemId, setActiveProblemId] = useState<ProblemId>('two-sum');
   const [isRunning, setIsRunning] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [endTime, setEndTime] = useState<string | null>(null); // 👈 NEW: For Server Timer
+
   // We store the state for EACH problem id
   const [solutions, setSolutions] = useState<Record<ProblemId, {
     code: string;
@@ -106,7 +109,7 @@ export const CodingRound = ({ isSidebarExpanded = false }: { isSidebarExpanded?:
     }
   });
 
-  const { completeRound, email } = useCompetitionStore();
+  const { completeRound, email, userId, incrementTabSwitch } = useCompetitionStore();
 
   const currentProblem = problems[activeProblemId];
   const activeSolution = solutions[activeProblemId];
@@ -118,6 +121,84 @@ export const CodingRound = ({ isSidebarExpanded = false }: { isSidebarExpanded?:
   const runResult = activeSolution.runResult;
   const consoleView = activeSolution.consoleView;
   const activeTab = activeSolution.activeTab;
+
+  // --- 🔥 1. INIT: FETCH RESTORE DATA & SYNC TIMER ---
+  useEffect(() => {
+    const initCodingRound = async () => {
+      if (!userId) return;
+
+      try {
+        // A. Fetch Session for Timer
+        const { data: session } = await supabase.from('exam_sessions').select('coding_start_time, coding_duration').eq('user_id', userId).single();
+        const { data: config } = await supabase.from('game_config').select('value').eq('key', 'coding_duration').single();
+
+        const DURATION_MINUTES = config?.value ? parseInt(config.value) : 45; // Default 45 mins
+        let startTime = session?.coding_start_time;
+
+        if (!startTime) {
+          // First Start? Save time
+          startTime = new Date().toISOString();
+          await supabase.from('exam_sessions').update({ coding_start_time: startTime }).eq('user_id', userId);
+        }
+
+        // Calculate End Time
+        const calculatedEndTime = new Date(new Date(startTime).getTime() + DURATION_MINUTES * 60000);
+        setEndTime(calculatedEndTime.toISOString());
+
+        // B. Restore Previous Code
+        const { data: draft } = await supabase.from('coding_submissions').select('solutions').eq('user_id', userId).single();
+
+        if (draft && draft.solutions) {
+          setSolutions(draft.solutions);
+          toast.success("Previous Code Restored", { icon: <RefreshCw className="w-4 h-4" /> });
+        }
+
+      } catch (err) {
+        console.error("Init Error:", err);
+      }
+    };
+
+    initCodingRound();
+  }, [userId]);
+
+  // ---  2. AUTO-SAVE LOGIC (Debounced) ---
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      if (userId) {
+        await supabase.from('coding_submissions').upsert({
+          user_id: userId,
+          solutions: solutions, // Saves full state (code, language, locks)
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id' });
+      }
+    }, 2000); // Autosave every 2 seconds after typing stops
+
+    return () => clearTimeout(timer);
+  }, [solutions, userId]);
+
+  // ---  3. ANTI-CHEAT: TAB SWITCH ---
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        incrementTabSwitch();
+        toast.warning('Tab switch detected! This has been logged.', {
+          icon: <AlertTriangle className="w-4 h-4 text-orange-500" />,
+          duration: 4000
+        });
+      }
+    };
+    const prevent = (e: any) => { e.preventDefault(); toast.error('Action disabled in Proctored Mode'); };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    // document.addEventListener('copy', prevent); // Uncomment for strict mode
+    // document.addEventListener('paste', prevent);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      // document.removeEventListener('copy', prevent);
+      // document.removeEventListener('paste', prevent);
+    };
+  }, [incrementTabSwitch]);
+
 
   // -- UPDATER HELPERS --
   const updateSolution = (updates: Partial<typeof activeSolution>) => {
@@ -131,22 +212,13 @@ export const CodingRound = ({ isSidebarExpanded = false }: { isSidebarExpanded?:
 
   const setCode = (newCode: string) => updateSolution({ code: newCode });
   const setLanguage = (newLang: string) => {
-    // If locked, we shouldn't be here (UI disabled), but safe guard
     if (isLocked) return;
-
-    // When changing language, we set to default code for that language IF it was empty or default?
-    // Or just reset to default for that language to avoid syntax errors?
-    // Requirement: "user select C in 2sums -> writes code -> lock then that tab should lock on C... same is in binary search... switching... shouldn't clear"
-    // So when Switching Tab (activeProblemId changes), we load save state.
-    // But when active tab is SAME, and we change Language, we usually reset code to template.
     const defaultCode = currentProblem.defaultCode[newLang as keyof typeof currentProblem.defaultCode] || '';
     updateSolution({ language: newLang, code: defaultCode, runResult: null });
   };
 
   const setRunResult = (res: any) => updateSolution({ runResult: res });
   const setConsoleView = (view: 'testcases' | 'result') => updateSolution({ consoleView: view });
-
-  // No useEffect for resetting anymore! State is derived from solutions[activeProblemId].
 
   const toggleLock = () => {
     const nextLocked = !isLocked;
@@ -162,7 +234,7 @@ export const CodingRound = ({ isSidebarExpanded = false }: { isSidebarExpanded?:
   const executeResult = async (probId: ProblemId, isSubmission: boolean) => {
     const sol = solutions[probId];
     try {
-      const response = await fetch('http://localhost:3001/api/execute', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/execute`, { // Updated to use ENV or localhost
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -172,10 +244,41 @@ export const CodingRound = ({ isSidebarExpanded = false }: { isSidebarExpanded?:
           language: sol.language,
           problemId: probId,
           teamName: email || 'Anonymous',
+          userId: userId,
           isSubmission,
         }),
       });
-      return await response.json();
+
+      const initData = await response.json();
+
+      if (!response.ok || initData.error || initData.status === 'Invalid') {
+        return initData;
+      }
+
+      const jobId = initData.job_id;
+      if (!jobId) return { status: 'Error', output: 'No Job ID returned', results: [], score: 0 };
+
+      // POLLING LOOP
+      const MAX_RETRIES = 20; // 40 seconds
+      for (let i = 0; i < MAX_RETRIES; i++) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        try {
+          const statusRes = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/status/${jobId}`);
+          if (!statusRes.ok) continue;
+
+          const statusData = await statusRes.json();
+
+          if (statusData.status === 'completed' || statusData.status === 'success' || statusData.status === 'error') {
+            return statusData;
+          }
+        } catch (pollErr) {
+          console.error("Polling error:", pollErr);
+        }
+      }
+
+      return { status: 'Error', output: 'Execution Timed Out', results: [], score: 0 };
+
     } catch (e) {
       return { status: 'Error', output: 'Network Error', results: [], score: 0 };
     }
@@ -256,8 +359,6 @@ export const CodingRound = ({ isSidebarExpanded = false }: { isSidebarExpanded?:
     setShowSubmitConfirm(false);
   };
 
-  // handleReset is now handled inline in AlertDialog
-
   const handleTimeUp = useCallback(() => {
     toast.error("Time Up! Locking and Submitting...");
     setSolutions(prev => ({
@@ -330,7 +431,12 @@ export const CodingRound = ({ isSidebarExpanded = false }: { isSidebarExpanded?:
         <div className="flex-1 flex flex-col bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden relative">
           {/* Timer Bar - Prominent display at the top */}
           <div className="bg-zinc-950 border-b border-zinc-800 px-4 py-2 shrink-0">
-            <CompetitionTimer totalSeconds={60 * 60} onTimeUp={handleTimeUp} />
+            {/* SERVER SYNCED TIMER */}
+            <CompetitionTimer
+              totalSeconds={2700} // Fallback 
+              targetDate={endTime} // Server Logic
+              onTimeUp={handleTimeUp}
+            />
           </div>
 
           {/* Toolbar */}
@@ -383,7 +489,6 @@ export const CodingRound = ({ isSidebarExpanded = false }: { isSidebarExpanded?:
                     <AlertDialogCancel className="bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700 hover:text-white">Cancel</AlertDialogCancel>
                     <AlertDialogAction onClick={() => {
                       const defaultValue = currentProblem.defaultCode[language as keyof typeof currentProblem.defaultCode] || '';
-                      // Use updateSolution directly for cleaner atomic update
                       updateSolution({ code: defaultValue, runResult: null, consoleView: 'testcases', activeTab: 'case1' });
                       toast.info("Code reset to default template");
                     }} className="bg-red-600 text-white hover:bg-red-700 border-red-600">

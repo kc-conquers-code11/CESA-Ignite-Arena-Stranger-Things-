@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 
 interface CompetitionTimerProps {
   totalSeconds: number;
+  targetDate?: string | null;
   onTimeUp?: () => void;
   isActive?: boolean;
   className?: string;
@@ -13,6 +14,7 @@ interface CompetitionTimerProps {
 
 export const CompetitionTimer = ({
   totalSeconds,
+  targetDate,
   onTimeUp,
   isActive = true,
   className,
@@ -20,11 +22,35 @@ export const CompetitionTimer = ({
   const [timeRemaining, setTimeRemaining] = useState(totalSeconds);
   const { tabSwitchCount, currentRound } = useCompetitionStore();
 
+  // Sync state with targetDate when it becomes available
+  useEffect(() => {
+    if (targetDate) {
+      const msRemaining = new Date(targetDate).getTime() - new Date().getTime();
+      const secondsRemaining = Math.max(0, Math.floor(msRemaining / 1000));
+      setTimeRemaining(secondsRemaining);
+    } else {
+      setTimeRemaining(totalSeconds);
+    }
+  }, [targetDate, totalSeconds]);
+
   useEffect(() => {
     if (!isActive) return;
 
     const interval = setInterval(() => {
       setTimeRemaining((prev) => {
+        // If we have a target date, recalculate to avoid drift
+        if (targetDate) {
+          const msRemaining = new Date(targetDate).getTime() - new Date().getTime();
+          const seconds = Math.floor(msRemaining / 1000);
+
+          if (seconds <= 0) {
+            if (prev > 0) onTimeUp?.();
+            return 0;
+          }
+          return seconds;
+        }
+
+        // Fallback to simple countdown
         if (prev <= 1) {
           onTimeUp?.();
           return 0;
@@ -34,7 +60,7 @@ export const CompetitionTimer = ({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isActive, onTimeUp]);
+  }, [isActive, onTimeUp, targetDate]);
 
   const minutes = Math.floor(timeRemaining / 60);
   const seconds = timeRemaining % 60;
